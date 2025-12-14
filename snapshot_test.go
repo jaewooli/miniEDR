@@ -2,9 +2,12 @@ package miniedr_test
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/jaewooli/miniedr"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 type StubCapturer struct {
@@ -17,6 +20,10 @@ func (s *StubCapturer) Capture() error {
 	return nil
 }
 
+const (
+	memSnapshotText = "MEMSnapshot(at=1970-01-01T09:02:03+09:00, RAM: Total=1000B Avail=250B UsedApprox=750B (75.00%), Free=100B Buffers=50B Cached=200B; Swap: Total=400B Used=100B (25.00%) Free=300B, Sin=1B Sout=2B)"
+)
+
 func TestSnapshot(t *testing.T) {
 	out := &bytes.Buffer{}
 	capturers := []miniedr.Capturer{}
@@ -27,7 +34,7 @@ func TestSnapshot(t *testing.T) {
 		got, err := snapshotManager.GetInfo()
 
 		assertError(t, err, "")
-		assertTrue(t, got, "out: *bytes.Buffer\ncapturers: []")
+		assertEqual(t, got, "out: *bytes.Buffer\ncapturers: []")
 
 		t.Run("capture for SnapshotManager", func(t *testing.T) {
 			err2 := snapshotManager.Capture()
@@ -44,7 +51,7 @@ func TestSnapshot(t *testing.T) {
 		got, err := snapshotManager.GetInfo()
 
 		assertError(t, err, "")
-		assertTrue(t, got, "out: *bytes.Buffer\ncapturers: [&{}]")
+		assertEqual(t, got, "out: *bytes.Buffer\ncapturers: [&{}]")
 
 		t.Run("capture for SnapshotManager", func(t *testing.T) {
 			err2 := snapshotManager.Capture()
@@ -54,7 +61,46 @@ func TestSnapshot(t *testing.T) {
 }
 
 func TestMemSnapShot(t *testing.T) {
+	memCapturer := &miniedr.MEMCapturer{}
 
+	memCapturer.Now = func() time.Time { return time.Unix(123, 0) }
+	memCapturer.VirtualFn = func() (*mem.VirtualMemoryStat, error) {
+		return &mem.VirtualMemoryStat{
+			Total:     1000,
+			Available: 250,
+			Free:      100,
+			Buffers:   50,
+			Cached:    200,
+		}, nil
+	}
+
+	memCapturer.SwapFn = func() (*mem.SwapMemoryStat, error) {
+		return &mem.SwapMemoryStat{
+			Total: 400,
+			Used:  100,
+			Free:  300,
+			Sin:   1,
+			Sout:  2,
+		}, nil
+	}
+
+	t.Run("getinfo empty memory snapshot", func(t *testing.T) {
+		got, err := memCapturer.GetInfo()
+		assertError(t, err, "")
+		assertEqual(t, got, "MEMSnapshot(empty)")
+
+	})
+
+	t.Run("getinfo not empty memory snapshot", func(t *testing.T) {
+		err := memCapturer.Capture()
+
+		assertError(t, err, "")
+
+		got, err := memCapturer.GetInfo()
+
+		assertError(t, err, "")
+		assertEqual(t, got, memSnapshotText)
+	})
 }
 
 func assertError(t testing.TB, got error, want string) {
@@ -68,9 +114,16 @@ func assertError(t testing.TB, got error, want string) {
 	}
 }
 
-func assertTrue(t testing.TB, got, want string) {
+func assertEqual[T any](t testing.TB, got, want T) {
 	t.Helper()
-	if got != want {
-		t.Errorf("want %q, got %q", want, got)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("want '%v', got '%v'", want, got)
+	}
+}
+
+func assertTrue(t testing.TB, got bool) {
+	t.Helper()
+	if !got {
+		t.Errorf("got %v", got)
 	}
 }
