@@ -8,7 +8,7 @@ import (
 
 func main() {
 	io := &bytes.Buffer{}
-	SM := miniedr.NewSnapshotManager(io)
+	SM := miniedr.NewSnapshotManager(io, nil)
 
 	SM.Capture()
 	fmt.Print(SM.GetInfo())

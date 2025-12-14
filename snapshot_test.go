@@ -34,11 +34,11 @@ func TestSnapshot(t *testing.T) {
 		got, err := snapshotManager.GetInfo()
 
 		assertError(t, err, "")
-		assertEqual(t, got, "out: *bytes.Buffer\ncapturers: []")
+		assertEqual(t, got, "SnapshotManager(capturers=0)")
 
 		t.Run("capture for SnapshotManager", func(t *testing.T) {
 			err2 := snapshotManager.Capture()
-			assertError(t, err2, "no snapshot is in snapshot manager")
+			assertError(t, err2, "no capturer is in snapshot manager")
 		})
 
 	})
@@ -51,7 +51,7 @@ func TestSnapshot(t *testing.T) {
 		got, err := snapshotManager.GetInfo()
 
 		assertError(t, err, "")
-		assertEqual(t, got, "out: *bytes.Buffer\ncapturers: [&{}]")
+		assertEqual(t, got, "SnapshotManager(out=*bytes.Buffer, capturers=1)\n- [0] *miniedr_test.StubCapturer: \n")
 
 		t.Run("capture for SnapshotManager", func(t *testing.T) {
 			err2 := snapshotManager.Capture()

@@ -1,13 +1,16 @@
 package miniedr
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"github.com/shirou/gopsutil/v4/mem"
 	"io"
-	"reflect"
+	"strings"
 	"time"
+)
+
+const (
+	memSnapshotText = "MEMSnapshot(at=%s, RAM: Total=%dB Avail=%dB UsedApprox=%dB (%.2f%%), Free=%dB Buffers=%dB Cached=%dB; Swap: Total=%dB Used=%dB (%.2f%%) Free=%dB, Sin=%dB Sout=%dB)"
 )
 
 type Info interface {
@@ -27,12 +30,11 @@ type MEMSnapshot struct {
 }
 
 type MEMCapturer struct {
-	Now func() time.Time
-
+	Now       func() time.Time
 	VirtualFn func() (*mem.VirtualMemoryStat, error)
 	SwapFn    func() (*mem.SwapMemoryStat, error)
 
-	Snapshot MEMSnapshot
+	snapshot MEMSnapshot
 }
 
 func NewMEMCapturer() *MEMCapturer {
@@ -49,6 +51,13 @@ func (m *MEMCapturer) Capture() error {
 		now = m.Now
 	}
 
+	if m.VirtualFn == nil {
+		return errors.New("mem capturer: VirtualFn is nil")
+	}
+	if m.SwapFn == nil {
+		return errors.New("mem capturer: SwapFn is nil")
+	}
+
 	v, err := m.VirtualFn()
 	if err != nil {
 		return fmt.Errorf("mem.VirtualMemory: %w", err)
@@ -58,7 +67,7 @@ func (m *MEMCapturer) Capture() error {
 		return fmt.Errorf("mem.SwapMemory: %w", err)
 	}
 
-	m.Snapshot = MEMSnapshot{
+	m.snapshot = MEMSnapshot{
 		At:      now(),
 		Virtual: v,
 		Swap:    s,
@@ -67,12 +76,12 @@ func (m *MEMCapturer) Capture() error {
 }
 
 func (m *MEMCapturer) GetInfo() (string, error) {
-	if m.Snapshot.Virtual == nil || m.Snapshot.Swap == nil {
+	if m.snapshot.Virtual == nil || m.snapshot.Swap == nil {
 		return "MEMSnapshot(empty)", nil
 	}
 
-	v := m.Snapshot.Virtual
-	s := m.Snapshot.Swap
+	v := m.snapshot.Virtual
+	s := m.snapshot.Swap
 
 	usedApprox := uint64(0)
 	usedPctApprox := 0.0
@@ -89,49 +98,50 @@ func (m *MEMCapturer) GetInfo() (string, error) {
 	}
 
 	return fmt.Sprintf(
-		"MEMSnapshot(at=%s, RAM: Total=%dB Avail=%dB UsedApprox=%dB (%.2f%%), Free=%dB Buffers=%dB Cached=%dB; Swap: Total=%dB Used=%dB (%.2f%%) Free=%dB, Sin=%dB Sout=%dB)",
-		m.Snapshot.At.Format(time.RFC3339),
+		memSnapshotText,
+		m.snapshot.At.Format(time.RFC3339),
 		v.Total, v.Available, usedApprox, usedPctApprox, v.Free, v.Buffers, v.Cached,
 		s.Total, s.Used, swapPct, s.Free, s.Sin, s.Sout,
 	), nil
 }
 
+// ---------- SnapshotManager -----------
 type SnapshotManager struct {
 	out       io.Writer
 	capturers []Capturer
 }
 
-func (s *SnapshotManager) Capture() error {
+func (sm *SnapshotManager) Capture() error {
 
-	if len(s.capturers) == 0 {
-		return errors.New("no snapshot is in snapshot manager")
+	if len(sm.capturers) == 0 {
+		return errors.New("no capturer is in snapshot manager")
 	}
-	for _, snapshot := range s.capturers {
-		err := snapshot.Capture()
-		if err != nil {
-			return fmt.Errorf("error in snapshot capturing: %q", err.Error())
+	for i, snapshot := range sm.capturers {
+		if err := snapshot.Capture(); err != nil {
+			return fmt.Errorf("snapshot manager: capturer[%d](%T) capture failed: %q", i, snapshot, err.Error())
 		}
 
 	}
 	return nil
 }
 
-func (s *SnapshotManager) GetInfo() (string, error) {
-	info := &bytes.Buffer{}
-
-	fmt.Fprintf(info, "out: %v\ncapturers: [", reflect.TypeOf(s.out))
-	infoString := info.String()
-
-	capturersInfo := reflect.ValueOf(s.capturers)
-
-	fmt.Fprintf(info, "%v %d", capturersInfo.Kind(), capturersInfo.Len())
-	for i := range capturersInfo.Len() {
-		ptrCapturer := capturersInfo.Index(i)
-		infoString += fmt.Sprintf("%v", ptrCapturer.Elem())
+func (sm *SnapshotManager) GetInfo() (string, error) {
+	if len(sm.capturers) == 0 {
+		return "SnapshotManager(capturers=0)", nil
 	}
-	infoString += "]"
 
-	return infoString, nil
+	var b strings.Builder
+	fmt.Fprintf(&b, "SnapshotManager(out=%T, capturers=%d)\n", sm.out, len(sm.capturers))
+
+	for i, c := range sm.capturers {
+		info, err := c.GetInfo()
+		if err != nil {
+			return "", fmt.Errorf("snapshot manager: capturer[%d](%T) GetInfo failed: %w", i, c, err)
+		}
+		fmt.Fprintf(&b, "- [%d] %T: %s\n", i, c, info)
+	}
+
+	return b.String(), nil
 }
 
 func NewSnapshotManager(out io.Writer, capturers []Capturer) *SnapshotManager {
