@@ -19,8 +19,6 @@ type Capturer interface {
 	Capture() error
 }
 
-type BasicCapturer struct {
-}
 type MEMSnapshot struct {
 	At time.Time
 
@@ -29,8 +27,6 @@ type MEMSnapshot struct {
 }
 
 type MEMCapturer struct {
-	BasicCapturer
-
 	Now func() time.Time
 
 	VirtualFn func() (*mem.VirtualMemoryStat, error)
