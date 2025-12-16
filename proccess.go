@@ -138,7 +138,7 @@ func (c *ProcCapturer) Capture() error {
 
 func (c *ProcCapturer) GetInfo() (string, error) {
 	if c.curr == nil {
-		return "ProcSnapshot(empty)", nil
+		return "ProcSnapshot(empty)\n", nil
 	}
 	// show up to 3 new procs in short form
 	var examples []string
@@ -164,7 +164,7 @@ func (c *ProcCapturer) GetInfo() (string, error) {
 	}
 
 	return fmt.Sprintf(
-		"ProcSnapshot(at=%s, procs=%d, new=%d, dead=%d%s)",
+		"ProcSnapshot(at=%s, procs=%d, new=%d, dead=%d%s)\n",
 		c.curr.At.Format(time.RFC3339),
 		len(c.curr.Procs),
 		len(c.curr.NewPIDs),

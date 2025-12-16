@@ -4,12 +4,23 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/jaewooli/miniedr"
+	"log"
 )
 
 func main() {
 	io := &bytes.Buffer{}
-	SM := miniedr.NewSnapshotManager(io, nil)
+	cb := miniedr.NewCapturersBuilder()
 
-	SM.Capture()
-	fmt.Print(SM.GetInfo())
+	capturers, err := cb.Build()
+
+	if err != nil {
+		log.Fatalf("ther is an error: %v", err)
+	}
+
+	sm := miniedr.NewSnapshotManager(io, capturers)
+
+	if err := sm.Capture(); err != nil {
+		log.Fatalf("ther is an error: %v", err)
+	}
+	fmt.Print(sm.GetInfo())
 }

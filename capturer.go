@@ -110,7 +110,7 @@ func (cb *CapturersBuilder) Build() (Capturers, error) {
 		if kind == "" {
 			kind = "all"
 		}
-		// 네 코드 베이스에 맞게: NewConnCapturer(kind) 또는 NewConnCapturer() + c.Kind=kind
+
 		cc := NewConnCapturer(kind)
 		out = append(out, cc)
 	}
