@@ -2,6 +2,7 @@ package miniedr_test
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func TestSnapshot(t *testing.T) {
 		got, err := snapshotManager.GetInfo()
 
 		assertError(t, err, "")
-		assertEqual(t, got, "SnapshotManager(capturers=0)")
+		assertEqual(t, got, "SnapshotManager(capturers=0)\n")
 
 		t.Run("capture for SnapshotManager", func(t *testing.T) {
 			err2 := snapshotManager.Capture()
@@ -58,6 +59,47 @@ func TestSnapshot(t *testing.T) {
 			assertError(t, err2, "")
 		})
 	})
+}
+
+func TestCapturerMaker(t *testing.T) {
+	got := miniedr.NewCapturers()
+
+	want := []miniedr.Capturer{
+		miniedr.NewCPUCapturer(),
+		miniedr.NewDISKCapturer(),
+		miniedr.NewMEMCapturer(),
+		miniedr.NewNETCapturer(),
+	}
+
+	for i, capturer := range got {
+		capturerVal := reflect.ValueOf(capturer).Elem()
+		wantVal := reflect.ValueOf(want[i]).Elem()
+
+		if capturerVal.Type() != wantVal.Type() {
+			t.Errorf("want %+v, got %+v", capturer, want[i])
+		}
+
+		for i := 0; i < capturerVal.NumField(); i++ {
+			gotField := capturerVal.Field(i)
+			wantField := capturerVal.Field(i)
+
+			if gotField.Kind() == reflect.Func {
+				assertEqual(t, fmt.Sprintf("%v", gotField), fmt.Sprintf("%v", wantField))
+			} else if gotField.Kind() == reflect.Pointer {
+				if !(gotField.IsNil() && wantField.IsNil()) {
+					t.Errorf("want %+v, got  %+v", wantField, gotField)
+				}
+			} else {
+				if gotField.CanInterface() {
+
+					assertEqual(t, capturerVal.Field(i).Interface(), wantVal.Field(i).Interface())
+				} else {
+					fmt.Printf("%+v", gotField)
+				}
+			}
+		}
+	}
+
 }
 
 func TestMemSnapShot(t *testing.T) {
@@ -117,7 +159,7 @@ func assertError(t testing.TB, got error, want string) {
 func assertEqual[T any](t testing.TB, got, want T) {
 	t.Helper()
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("want '%v', got '%v'", want, got)
+		t.Errorf("want '%+v', got '%+v'", want, got)
 	}
 }
 

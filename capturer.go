@@ -8,3 +8,14 @@ type Capturer interface {
 	Info
 	Capture() error
 }
+
+type Capturers []Capturer
+
+func NewCapturers() []Capturer {
+	return Capturers{
+		NewCPUCapturer(),
+		NewDISKCapturer(),
+		NewMEMCapturer(),
+		NewNETCapturer(),
+	}
+}

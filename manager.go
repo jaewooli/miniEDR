@@ -37,7 +37,7 @@ func (sm *SnapshotManager) Capture() error {
 
 func (sm *SnapshotManager) GetInfo() (string, error) {
 	if len(sm.capturers) == 0 {
-		return "SnapshotManager(capturers=0)", nil
+		return "SnapshotManager(capturers=0)\n", nil
 	}
 
 	var b strings.Builder
