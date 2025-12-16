@@ -37,6 +37,7 @@ func TestEDRAgentRun(t *testing.T) {
 			{Capturer: stub, Interval: 5 * time.Millisecond},
 		})
 		agent.Out = buf
+		agent.Verbose = true
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 		defer cancel()
 

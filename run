@@ -12,4 +12,4 @@ echo "[*] Building cli..."
 go build -o "$BIN_DIR/miniedr-cli"
 
 echo "[*] Running cli..."
-"$BIN_DIR/miniedr-cli"
+"$BIN_DIR/miniedr-cli" "$@"

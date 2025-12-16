@@ -22,6 +22,7 @@ type EDRAgent struct {
 	Schedules       []CapturerSchedule
 	DefaultInterval time.Duration
 	Out             io.Writer
+	Verbose         bool
 }
 
 func NewEDRAgent(schedules []CapturerSchedule) *EDRAgent {
@@ -115,7 +116,9 @@ func (a *EDRAgent) captureOnce(c Capturer) error {
 		fmt.Fprintf(a.Out, "[%s] getinfo error: %v\n", typeName(c), err)
 		return err
 	}
-	fmt.Fprintf(a.Out, "[%s] %s\n", typeName(c), info)
+	if a.Verbose {
+		fmt.Fprintf(a.Out, "[%s] %s\n", typeName(c), info)
+	}
 	return nil
 }
 
