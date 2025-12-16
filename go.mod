@@ -2,7 +2,10 @@ module github.com/jaewooli/miniedr
 
 go 1.25.5
 
-require github.com/shirou/gopsutil/v4 v4.25.11
+require (
+	github.com/shirou/gopsutil/v4 v4.25.11
+	gopkg.in/yaml.v3 v3.0.1
+)
 
 require (
 	github.com/ebitengine/purego v0.9.1 // indirect

@@ -63,11 +63,13 @@ func TestSnapshot(t *testing.T) {
 
 func TestCapturersBuilder(t *testing.T) {
 	gotBuilder := miniedr.NewCapturersBuilder()
-	got := gotBuilder.Build()
+	got, err := gotBuilder.Build()
+
+	assertError(t, err, "")
 
 	want := []miniedr.Capturer{
 		miniedr.NewCPUCapturer(),
-		miniedr.NewConnCapturer(),
+		miniedr.NewConnCapturer("all"),
 		miniedr.NewDISKCapturer(),
 		miniedr.NewFileWatchCapturer(),
 		miniedr.NewMEMCapturer(),
