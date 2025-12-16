@@ -117,7 +117,8 @@ func (a *EDRAgent) captureOnce(c Capturer) error {
 		return err
 	}
 	if a.Verbose {
-		fmt.Fprintf(a.Out, "[%s] %s\n", typeName(c), info)
+		ts := time.Now().Format(time.RFC3339)
+		fmt.Fprintf(a.Out, "\n==== %s @ %s ====\n%s\n", typeName(c), ts, info)
 	}
 	return nil
 }
