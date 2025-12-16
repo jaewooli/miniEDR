@@ -20,8 +20,9 @@ func main() {
 		log.Fatalf("ther is an error: %v", err)
 	}
 
-	sm := miniedr.NewSnapshotManager(os.Stdout, capturers)
-	agent := miniedr.NewEDRAgent(sm)
+	schedules := miniedr.DefaultSchedules(capturers)
+	agent := miniedr.NewEDRAgent(schedules)
+	agent.Out = os.Stdout
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

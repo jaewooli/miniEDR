@@ -29,25 +29,14 @@ func (s *stubEDRCapturer) GetInfo() (string, error) {
 	return s.info, s.infoErr
 }
 
-func newStubSnapshotManager(out *bytes.Buffer, captureErr, infoErr error, info string) (*miniedr.SnapshotManager, *stubEDRCapturer) {
-	stub := &stubEDRCapturer{
-		captureErr: captureErr,
-		infoErr:    infoErr,
-		info:       info,
-	}
-	sm := miniedr.NewSnapshotManager(out, []miniedr.Capturer{stub})
-	return sm, stub
-}
-
 func TestEDRAgentRun(t *testing.T) {
 	t.Run("runs until context done", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		sm, stub := newStubSnapshotManager(buf, nil, nil, "ok")
-		agent := &miniedr.EDRAgent{
-			Manager:  sm,
-			Interval: 5 * time.Millisecond,
-			Out:      buf,
-		}
+		stub := &stubEDRCapturer{info: "ok"}
+		agent := miniedr.NewEDRAgent([]miniedr.CapturerSchedule{
+			{Capturer: stub, Interval: 5 * time.Millisecond},
+		})
+		agent.Out = buf
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 		defer cancel()
 
@@ -63,12 +52,11 @@ func TestEDRAgentRun(t *testing.T) {
 
 	t.Run("returns capture error immediately", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		sm, stub := newStubSnapshotManager(buf, errors.New("kaput"), nil, "ok")
-		agent := &miniedr.EDRAgent{
-			Manager:  sm,
-			Interval: 5 * time.Millisecond,
-			Out:      buf,
-		}
+		stub := &stubEDRCapturer{captureErr: errors.New("kaput"), info: "ok"}
+		agent := miniedr.NewEDRAgent([]miniedr.CapturerSchedule{
+			{Capturer: stub, Interval: 5 * time.Millisecond},
+		})
+		agent.Out = buf
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -85,6 +73,6 @@ func TestEDRAgentRun(t *testing.T) {
 		defer cancel()
 
 		err := agent.Run(ctx)
-		assertError(t, err, "edr agent: Manager is nil")
+		assertError(t, err, "edr agent: schedules is empty")
 	})
 }
