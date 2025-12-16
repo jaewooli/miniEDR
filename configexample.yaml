@@ -1,0 +1,28 @@
+capturers:
+  cpu:
+    enabled: true
+
+  conn:
+    enabled: true
+    kind: all           # tcp/udp/all
+
+  disk:
+    enabled: true
+    paths: ["/"]        # 여러 마운트포인트도 가능
+
+  filewatch:
+    enabled: true
+    paths: ["/tmp", "/var/tmp"]
+    max_files: 50000
+
+  mem:
+    enabled: true
+
+  net:
+    enabled: true
+
+  persist:
+    enabled: true       # linux 기본: crontab/systemd/autostart
+
+  proc:
+    enabled: true
