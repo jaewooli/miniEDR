@@ -277,6 +277,16 @@ func TestMemSnapShot(t *testing.T) {
 		)
 		assertEqual(t, got, want)
 	})
+
+	t.Run("error when VirtualFn nil", func(t *testing.T) {
+		m2 := &miniedr.MEMCapturer{
+			SwapFn: mem.SwapMemory,
+			Now:    time.Now,
+		}
+		m2.VirtualFn = nil
+		err := m2.Capture()
+		assertError(t, err, "mem capturer: VirtualFn is nil")
+	})
 }
 
 func TestCPUCapturer(t *testing.T) {
@@ -285,6 +295,13 @@ func TestCPUCapturer(t *testing.T) {
 	got, err := c.GetInfo()
 	assertError(t, err, "")
 	assertEqual(t, got, "CPUSnapshot(empty)")
+
+	t.Run("error when TimesFn nil", func(t *testing.T) {
+		c2 := &miniedr.CPUCapturer{}
+		c2.TimesFn = nil
+		err := c2.Capture()
+		assertError(t, err, "cpu capturer: TimesFn is nil")
+	})
 
 	nowCalls := 0
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0)}
@@ -346,6 +363,13 @@ func TestNETCapturer(t *testing.T) {
 	assertError(t, err, "")
 	assertEqual(t, got, "NETSnapshot(empty)")
 
+	t.Run("error when IOFn nil", func(t *testing.T) {
+		n2 := &miniedr.NETCapturer{}
+		n2.IOFn = nil
+		err := n2.Capture()
+		assertError(t, err, "net capturer: IOFn is nil")
+	})
+
 	nowCalls := 0
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(15, 0)}
 	n.Now = func() time.Time {
@@ -392,6 +416,15 @@ func TestConnCapturer(t *testing.T) {
 	assertError(t, err, "")
 	assertEqual(t, got, "ConnSnapshot(empty)")
 
+	t.Run("propagates connection errors", func(t *testing.T) {
+		c2 := &miniedr.ConnCapturer{
+			Kind:          "all",
+			ConnectionsFn: func(kind string) ([]gnet.ConnectionStat, error) { return nil, fmt.Errorf("boom") },
+		}
+		err := c2.Capture()
+		assertError(t, err, "net.Connections(\"all\"): boom")
+	})
+
 	nowCalls := 0
 	nowSeq := []time.Time{time.Unix(0, 0), time.Unix(5, 0)}
 	c.Now = func() time.Time {
@@ -437,6 +470,18 @@ func TestDISKCapturer(t *testing.T) {
 	got, err := d.GetInfo()
 	assertError(t, err, "")
 	assertEqual(t, got, "DISKSnapshot(empty)")
+
+	t.Run("error when UsageFn nil", func(t *testing.T) {
+		d2 := &miniedr.DISKCapturer{
+			Paths: []string{"/"},
+			UsageFn: func(path string) (*disk.UsageStat, error) {
+				return nil, nil
+			},
+		}
+		d2.UsageFn = nil
+		err := d2.Capture()
+		assertError(t, err, "disk capturer: UsageFn is nil")
+	})
 
 	nowCalls := 0
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0)}
@@ -523,6 +568,34 @@ func TestFileWatchCapturer(t *testing.T) {
 	got, err = w.GetInfo()
 	assertError(t, err, "")
 	assertEqual(t, got, "FileWatchSnapshot(at=1970-01-01T09:00:20+09:00, files=1, events=2, sample=created:new.txt(+1))")
+
+	t.Run("single event sample without suffix", func(t *testing.T) {
+		dir2 := t.TempDir()
+		w2 := &miniedr.FileWatchCapturer{
+			Paths:    []string{dir2},
+			MaxFiles: 10,
+			WalkFn:   filepath.WalkDir,
+		}
+		nowCalls := 0
+		nowSeq := []time.Time{time.Unix(30, 0), time.Unix(40, 0)}
+		w2.Now = func() time.Time {
+			if nowCalls >= len(nowSeq) {
+				return nowSeq[len(nowSeq)-1]
+			}
+			defer func() { nowCalls++ }()
+			return nowSeq[nowCalls]
+		}
+
+		assertError(t, w2.Capture(), "")
+		newPath := filepath.Join(dir2, "one.txt")
+		if err := os.WriteFile(newPath, []byte("one"), 0o644); err != nil {
+			t.Fatalf("write one: %v", err)
+		}
+		assertError(t, w2.Capture(), "")
+		got, err := w2.GetInfo()
+		assertError(t, err, "")
+		assertEqual(t, got, "FileWatchSnapshot(at=1970-01-01T09:00:40+09:00, files=1, events=1, sample=created:one.txt)")
+	})
 }
 
 func TestPersistCapturer(t *testing.T) {
@@ -567,6 +640,12 @@ func TestPersistCapturer(t *testing.T) {
 	got, err = p.GetInfo()
 	assertError(t, err, "")
 	assertEqual(t, got, "PersistSnapshot(at=1970-01-01T09:00:30+09:00, sources=1, added=0, changed=1, removed=0)")
+
+	t.Run("error when sources empty", func(t *testing.T) {
+		p2 := &miniedr.PersistCapturer{Sources: nil}
+		err := p2.Capture()
+		assertError(t, err, "persist capturer: Sources is empty")
+	})
 }
 
 func assertError(t testing.TB, got error, want string) {
