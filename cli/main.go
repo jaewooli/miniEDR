@@ -20,7 +20,13 @@ func main() {
 	sm := miniedr.NewSnapshotManager(io, capturers)
 
 	if err := sm.Capture(); err != nil {
-		log.Fatalf("ther is an error: %v", err)
+		log.Fatalf("there is an error: %v", err)
 	}
-	fmt.Println(sm.GetInfo())
+
+	result, err := sm.GetInfo()
+
+	if err != nil {
+		log.Fatalf("there is an error: %v", err)
+	}
+	fmt.Println(result)
 }
