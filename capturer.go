@@ -11,11 +11,26 @@ type Capturer interface {
 
 type Capturers []Capturer
 
-func NewCapturers() []Capturer {
+type CapturersBuilder struct {
+	config []string
+}
+
+func (cb *CapturersBuilder) SetConfig(configs ...string) {
+	cb.config = configs
+}
+func (cb *CapturersBuilder) Build() Capturers {
 	return Capturers{
 		NewCPUCapturer(),
+		NewConnCapturer(),
 		NewDISKCapturer(),
+		NewFileWatchCapturer(),
 		NewMEMCapturer(),
 		NewNETCapturer(),
+		NewPersistCapturer(),
+		NewProcCapturer(),
 	}
+}
+
+func NewCapturersBuilder() *CapturersBuilder {
+	return &CapturersBuilder{}
 }

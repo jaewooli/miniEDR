@@ -69,14 +69,11 @@ type ConnCapturer struct {
 	curr *ConnSnapshot
 }
 
-func NewConnCapturer(kind string) *ConnCapturer {
-	if kind == "" {
-		kind = "all"
-	}
+func NewConnCapturer() *ConnCapturer {
 	return &ConnCapturer{
 		Now:           time.Now,
 		ConnectionsFn: gnet.Connections,
-		Kind:          kind,
+		Kind:          "all",
 	}
 }
 

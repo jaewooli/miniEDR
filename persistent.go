@@ -3,7 +3,10 @@ package miniedr
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -31,8 +34,11 @@ type PersistCapturer struct {
 	curr *PersistSnapshot
 }
 
-func NewPersistCapturer(sources ...PersistSource) *PersistCapturer {
-	return &PersistCapturer{Now: time.Now, Sources: sources}
+func NewPersistCapturer() *PersistCapturer {
+	return &PersistCapturer{
+		Now:     time.Now,
+		Sources: defaultPersistSources(),
+	}
 }
 
 func (p *PersistCapturer) Capture() error {
@@ -116,4 +122,111 @@ func (p *PersistCapturer) GetInfo() (string, error) {
 		"PersistSnapshot(at=%s, sources=%d, added=%d, changed=%d, removed=%d)",
 		p.curr.At.Format(time.RFC3339), sources, added, changed, removed,
 	), nil
+}
+
+func defaultPersistSources() []PersistSource {
+	return []PersistSource{
+		NewCrontabSource(),
+		NewSystemdUnitSource(),
+		NewAutostartDesktopSource(),
+	}
+}
+
+type CrontabSource struct{}
+
+func NewCrontabSource() PersistSource {
+	return &CrontabSource{}
+}
+
+func (c *CrontabSource) Name() string {
+	return "crontab"
+}
+
+func (c *CrontabSource) Snapshot() (map[string]string, error) {
+	out := make(map[string]string)
+
+	files := []string{"/etc/crontab"}
+	glob, _ := filepath.Glob("/etc/cron.d/*")
+	files = append(files, glob...)
+
+	for _, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+
+		lines := strings.Split(string(data), "\n")
+		for i, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+
+			key := fmt.Sprintf("%s:%d", path, i)
+			out[key] = line
+		}
+	}
+
+	return out, nil
+}
+
+type SystemdUnitSource struct{}
+
+func NewSystemdUnitSource() PersistSource {
+	return &SystemdUnitSource{}
+}
+
+func (s *SystemdUnitSource) Name() string {
+	return "systemd"
+}
+
+func (s *SystemdUnitSource) Snapshot() (map[string]string, error) {
+	out := make(map[string]string)
+
+	files, err := filepath.Glob("/etc/systemd/system/*.service")
+	if err != nil {
+		return out, nil
+	}
+
+	for _, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		out[path] = string(data)
+	}
+
+	return out, nil
+}
+
+type AutostartDesktopSource struct{}
+
+func NewAutostartDesktopSource() PersistSource {
+	return &AutostartDesktopSource{}
+}
+
+func (a *AutostartDesktopSource) Name() string {
+	return "autostart-desktop"
+}
+
+func (a *AutostartDesktopSource) Snapshot() (map[string]string, error) {
+	out := make(map[string]string)
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return out, nil
+	}
+
+	dir := filepath.Join(home, ".config", "autostart")
+	files, _ := filepath.Glob(filepath.Join(dir, "*.desktop"))
+
+	for _, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		out[path] = string(data)
+	}
+
+	return out, nil
 }

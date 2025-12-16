@@ -64,7 +64,7 @@ type FileWatchCapturer struct {
 func NewFileWatchCapturer(paths ...string) *FileWatchCapturer {
 	return &FileWatchCapturer{
 		Now:      time.Now,
-		Paths:    paths,
+		Paths:    defaultWatchPaths(),
 		MaxFiles: 50_000,
 		WalkFn:   filepath.WalkDir,
 	}
@@ -201,4 +201,27 @@ func (w *FileWatchCapturer) GetInfo() (string, error) {
 		len(w.curr.Events),
 		sample,
 	), nil
+}
+
+func defaultWatchPaths() []string {
+	var paths []string
+
+	home, _ := os.UserHomeDir()
+	paths = append(paths,
+		filepath.Join(home, "Downloads"),
+		filepath.Join(home, ".config", "autostart"),
+	)
+	uniq := make(map[string]struct{})
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		if _, ok := uniq[p]; ok {
+			continue
+		}
+		uniq[p] = struct{}{}
+		out = append(out, p)
+	}
+	return out
 }

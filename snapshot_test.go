@@ -61,14 +61,19 @@ func TestSnapshot(t *testing.T) {
 	})
 }
 
-func TestCapturerMaker(t *testing.T) {
-	got := miniedr.NewCapturers()
+func TestCapturersBuilder(t *testing.T) {
+	gotBuilder := miniedr.NewCapturersBuilder()
+	got := gotBuilder.Build()
 
 	want := []miniedr.Capturer{
 		miniedr.NewCPUCapturer(),
+		miniedr.NewConnCapturer(),
 		miniedr.NewDISKCapturer(),
+		miniedr.NewFileWatchCapturer(),
 		miniedr.NewMEMCapturer(),
 		miniedr.NewNETCapturer(),
+		miniedr.NewPersistCapturer(),
+		miniedr.NewProcCapturer(),
 	}
 
 	for i, capturer := range got {
