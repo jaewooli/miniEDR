@@ -3,10 +3,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/cli"
+cd "$SCRIPT_DIR/code/cli"
+
+BIN_DIR="$SCRIPT_DIR/bin"
+mkdir -p "$BIN_DIR"
 
 echo "[*] Building cli..."
-go build -o cli
+go build -o "$BIN_DIR/miniedr-cli"
 
 echo "[*] Running cli..."
-./cli
+"$BIN_DIR/miniedr-cli"

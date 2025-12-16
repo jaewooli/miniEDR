@@ -1,0 +1,28 @@
+capturers:
+  cpu:
+    enabled: true
+
+  conn:
+    enabled: true
+    kind: all
+
+  disk:
+    enabled: true
+    paths: ["/home/jaeu1341/"]
+
+  filewatch:
+    enabled: true
+    paths: ["/home/jaeu1341/06_GO_PROJECT/01_PSUTIL"]
+    max_files: 50000
+
+  mem:
+    enabled: true
+
+  net:
+    enabled: true
+
+  persist:
+    enabled: true
+
+  proc:
+    enabled: true
