@@ -311,7 +311,7 @@ func TestCPUCapturer(t *testing.T) {
 			{User: 2, System: 2, Idle: 16},
 		},
 		{
-			{User: 6, System: 4, Idle: 17},
+			{User: 5, System: 4, Idle: 19},
 		},
 	}
 
@@ -336,7 +336,7 @@ func TestCPUCapturer(t *testing.T) {
 	assertError(t, c.Capture(), "")
 	got, err = c.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "CPUSnapshot(at=1970-01-01T09:00:20+09:00, totalUsage=75.00%, cpu0=75.0% cpu1=50.0%)")
+	assertEqual(t, got, "CPUSnapshot(at=1970-01-01T09:00:20+09:00, totalUsage=62.50%, cpu0=75.0% cpu1=50.0%)")
 }
 
 func TestNETCapturer(t *testing.T) {
@@ -492,6 +492,7 @@ func TestFileWatchCapturer(t *testing.T) {
 	w := &miniedr.FileWatchCapturer{
 		Paths:    []string{dir},
 		MaxFiles: 10,
+		WalkFn:   filepath.WalkDir,
 	}
 
 	got, err := w.GetInfo()
@@ -521,7 +522,7 @@ func TestFileWatchCapturer(t *testing.T) {
 	assertError(t, w.Capture(), "")
 	got, err = w.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "FileWatchSnapshot(at=1970-01-01T09:00:20+09:00, files=1, events=2, sample=created:new.txt)")
+	assertEqual(t, got, "FileWatchSnapshot(at=1970-01-01T09:00:20+09:00, files=1, events=2, sample=created:new.txt(+1))")
 }
 
 func TestPersistCapturer(t *testing.T) {
