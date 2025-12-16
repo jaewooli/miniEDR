@@ -206,10 +206,10 @@ func (w *FileWatchCapturer) GetInfo() (string, error) {
 func defaultWatchPaths() []string {
 	var paths []string
 
-	home, _ := os.UserHomeDir()
+	home := "/"
 	paths = append(paths,
-		filepath.Join(home, "Downloads"),
-		filepath.Join(home, ".config", "autostart"),
+		filepath.Join(home, "tmp"),
+		filepath.Join(home, "var", "tmp"),
 	)
 	uniq := make(map[string]struct{})
 	out := make([]string, 0, len(paths))

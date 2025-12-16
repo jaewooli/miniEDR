@@ -10,6 +10,7 @@ import (
 func main() {
 	io := &bytes.Buffer{}
 	cb := miniedr.NewCapturersBuilder()
+	cb.SetConfigFile("../config.yaml")
 
 	capturers, err := cb.Build()
 

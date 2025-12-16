@@ -2,7 +2,9 @@ package miniedr
 
 import (
 	"errors"
+	"fmt"
 	"gopkg.in/yaml.v3"
+	"os"
 	"strings"
 )
 
@@ -18,11 +20,16 @@ type Capturer interface {
 type Capturers []Capturer
 
 type CapturersBuilder struct {
-	config []string
+	config     []string
+	configFile string
 }
 
 func (cb *CapturersBuilder) SetConfig(configs ...string) {
 	cb.config = configs
+}
+
+func (cb *CapturersBuilder) SetConfigFile(path string) {
+	cb.configFile = path
 }
 
 type CapturerToggle struct {
@@ -88,12 +95,21 @@ func (cb *CapturersBuilder) Build() (Capturers, error) {
 	cfg := defaultCapturersConfig()
 
 	// YAML이 들어오면 기본값 위에 덮어쓰기
-	if len(cb.config) > 0 {
-		raw := strings.Join(cb.config, "\n")
-		if strings.TrimSpace(raw) != "" {
-			if err := yaml.Unmarshal([]byte(raw), &cfg); err != nil {
-				return nil, err
-			}
+	var raw string
+	switch {
+	case len(cb.config) > 0:
+		raw = strings.Join(cb.config, "\n")
+	case cb.configFile != "":
+		data, err := os.ReadFile(cb.configFile)
+		if err != nil {
+			return nil, fmt.Errorf("read config file %q: %w", cb.configFile, err)
+		}
+		raw = string(data)
+	}
+
+	if strings.TrimSpace(raw) != "" {
+		if err := yaml.Unmarshal([]byte(raw), &cfg); err != nil {
+			return nil, err
 		}
 	}
 
