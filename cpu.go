@@ -3,6 +3,8 @@ package miniedr
 import (
 	"errors"
 	"fmt"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
