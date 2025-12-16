@@ -164,7 +164,7 @@ func (c *ProcCapturer) GetInfo() (string, error) {
 	}
 
 	return fmt.Sprintf(
-		"ProcSnapshot(at=%s, procs=%d, new=%d, dead=%d%s)\n",
+		"ProcSnapshot(at=%s, procs=%d, new=%d, dead=%d%s)",
 		c.curr.At.Format(time.RFC3339),
 		len(c.curr.Procs),
 		len(c.curr.NewPIDs),

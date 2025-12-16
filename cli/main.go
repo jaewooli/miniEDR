@@ -22,5 +22,5 @@ func main() {
 	if err := sm.Capture(); err != nil {
 		log.Fatalf("ther is an error: %v", err)
 	}
-	fmt.Print(sm.GetInfo())
+	fmt.Println(sm.GetInfo())
 }
