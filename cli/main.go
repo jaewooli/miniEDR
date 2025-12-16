@@ -1,14 +1,16 @@
 package main
 
 import (
-	"bytes"
-	"fmt"
+	"context"
+	"errors"
 	"github.com/jaewooli/miniedr"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	io := &bytes.Buffer{}
 	cb := miniedr.NewCapturersBuilder()
 	cb.SetConfigFile("../config.yaml")
 
@@ -18,16 +20,13 @@ func main() {
 		log.Fatalf("ther is an error: %v", err)
 	}
 
-	sm := miniedr.NewSnapshotManager(io, capturers)
+	sm := miniedr.NewSnapshotManager(os.Stdout, capturers)
+	agent := miniedr.NewEDRAgent(sm)
 
-	if err := sm.Capture(); err != nil {
-		log.Fatalf("there is an error: %v", err)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := agent.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		log.Fatalf("agent error: %v", err)
 	}
-
-	result, err := sm.GetInfo()
-
-	if err != nil {
-		log.Fatalf("there is an error: %v", err)
-	}
-	fmt.Println(result)
 }
