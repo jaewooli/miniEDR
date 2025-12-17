@@ -198,6 +198,11 @@ func (c *ConnCapturer) GetVerboseInfo() (string, error) {
 	return strings.TrimSuffix(b.String(), "\n"), nil
 }
 
+// IsWarm reports whether a previous snapshot exists (needed for new/dead deltas).
+func (c *ConnCapturer) IsWarm() bool {
+	return c.prev != nil
+}
+
 func formatConnIDs(ids []ConnID, source map[ConnID]gnet.ConnectionStat, limit int) []string {
 	n := len(ids)
 	if limit > 0 && n > limit {

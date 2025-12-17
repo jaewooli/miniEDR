@@ -52,7 +52,7 @@ func TestNETCapturer(t *testing.T) {
 	assertError(t, n.Capture(), "")
 	got, err = n.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "NETSnapshot(at=1970-01-01T09:00:10+09:00, ifaces=2, rxRate=n/a, txRate=n/a)")
+	assertEqual(t, got, "NETSnapshot(at=1970-01-01T09:00:10+09:00, ifaces=2, rxRate=0B/s, txRate=0B/s)")
 
 	assertError(t, n.Capture(), "")
 	got, err = n.GetInfo()

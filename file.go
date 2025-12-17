@@ -244,6 +244,11 @@ func (w *FileWatchCapturer) GetVerboseInfo() (string, error) {
 	return strings.TrimSuffix(b.String(), "\n"), nil
 }
 
+// IsWarm reports whether a previous snapshot exists (needed for event deltas).
+func (w *FileWatchCapturer) IsWarm() bool {
+	return w.prev != nil
+}
+
 func defaultWatchPaths() []string {
 	var paths []string
 

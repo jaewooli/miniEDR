@@ -164,6 +164,11 @@ func (p *PersistCapturer) GetVerboseInfo() (string, error) {
 	return strings.TrimSuffix(b.String(), "\n"), nil
 }
 
+// IsWarm reports whether a previous snapshot exists (needed for diff-based metrics).
+func (p *PersistCapturer) IsWarm() bool {
+	return p.prev != nil
+}
+
 func defaultPersistSources() []PersistSource {
 	return []PersistSource{
 		NewCrontabSource(),

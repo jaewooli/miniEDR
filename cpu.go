@@ -19,8 +19,8 @@ type CPUSnapshot struct {
 }
 
 type CPUCapturer struct {
-	Now       func() time.Time
-	TimesFn   func(percpu bool) ([]cpu.TimesStat, error)
+	Now     func() time.Time
+	TimesFn func(percpu bool) ([]cpu.TimesStat, error)
 
 	prev *CPUSnapshot
 	curr *CPUSnapshot
@@ -28,8 +28,8 @@ type CPUCapturer struct {
 
 func NewCPUCapturer() *CPUCapturer {
 	return &CPUCapturer{
-		Now:       time.Now,
-		TimesFn:   cpu.Times,
+		Now:     time.Now,
+		TimesFn: cpu.Times,
 	}
 }
 
@@ -181,4 +181,9 @@ func cpuUsagePct(a, b cpu.TimesStat) (float64, bool) {
 
 func totalCPUTime(t cpu.TimesStat) float64 {
 	return t.User + t.Nice + t.System + t.Idle + t.Iowait + t.Irq + t.Softirq + t.Steal + t.Guest + t.GuestNice
+}
+
+// IsWarm reports whether a previous snapshot exists (needed for delta-based metrics).
+func (c *CPUCapturer) IsWarm() bool {
+	return c.prev != nil
 }

@@ -199,6 +199,11 @@ func (d *DISKCapturer) GetVerboseInfo() (string, error) {
 	return out, nil
 }
 
+// IsWarm reports whether a previous snapshot exists (needed for IO deltas).
+func (d *DISKCapturer) IsWarm() bool {
+	return d.prev != nil
+}
+
 func deltaUint64(prev, cur uint64) uint64 {
 	if cur >= prev {
 		return cur - prev

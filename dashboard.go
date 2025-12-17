@@ -44,6 +44,7 @@ type dashboardItem struct {
 	Verbose string
 	Error   string
 	Changed bool
+	Warming bool
 	Logs    []dashboardLogEntry
 	Graphs  []graphInfo
 	Display string
@@ -55,6 +56,7 @@ type dashboardLogEntry struct {
 	Verbose string
 	Error   string
 	Changed bool
+	Warming bool
 }
 
 type graphInfo struct {
@@ -242,6 +244,15 @@ func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose b
 	if prev != "" && prev != payload {
 		item.Changed = true
 	}
+	if w, ok := c.(interface{ IsWarm() bool }); ok && !w.IsWarm() {
+		item.Warming = true
+	}
+	if item.Warming {
+		if item.Display != "" {
+			item.Display += " · "
+		}
+		item.Display += "warming up"
+	}
 
 	entry := dashboardLogEntry{
 		At:      ref,
@@ -249,6 +260,7 @@ func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose b
 		Verbose: item.Verbose,
 		Error:   item.Error,
 		Changed: item.Changed,
+		Warming: item.Warming,
 	}
 
 	d.mu.Lock()
@@ -365,10 +377,15 @@ func (d *DashboardServer) runPerCapturer(ctx context.Context, c Capturer) {
 	refreshSecs := d.refreshSeconds
 	eventRefresh := d.eventRefresh
 	capInterval := d.displayInterval
+	hasSnap := d.hasSnapshot
+	name := typeName(c)
+	_, hasItem := d.items[name]
 	d.mu.RUnlock()
 
-	ref := nowFn().Format(time.RFC3339)
-	d.captureSingle(c, ref, title, verbose, autoRefresh, refreshSecs, eventRefresh, capInterval)
+	if !hasSnap || !hasItem {
+		ref := nowFn().Format(time.RFC3339)
+		d.captureSingle(c, ref, title, verbose, autoRefresh, refreshSecs, eventRefresh, capInterval)
+	}
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -553,6 +570,10 @@ button:hover {
   color: #0b1220;
   font-weight: 700;
 }
+.pill.warm {
+  background: #fbbf24;
+  color: #0b1220;
+}
 .error {
   color: #fca5a5;
   font-weight: 600;
@@ -702,6 +723,7 @@ small {
             <h2>{{.Name}}</h2>
             {{if .Error}}<span class="pill" style="background:#f87171;color:#0b1220;">error</span>{{end}}
             {{if .Changed}}<span class="pill changed">changed</span>{{end}}
+            {{if .Warming}}<span class="pill warm">warming up</span>{{end}}
           </div>
           {{if .Error}}
             <div class="error">{{.Error}}</div>

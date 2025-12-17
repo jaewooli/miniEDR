@@ -60,7 +60,7 @@ func (n *NETCapturer) GetInfo() (string, error) {
 	}
 
 	// 델타 기반 초당 트래픽(rate) 계산: (BytesDelta / seconds)
-	rxRate, txRate := "n/a", "n/a"
+	rxRate, txRate := "0B/s", "0B/s"
 	if n.prev != nil {
 		sec := n.curr.At.Sub(n.prev.At).Seconds()
 		if sec > 0 {
@@ -143,4 +143,9 @@ func (n *NETCapturer) GetVerboseInfo() (string, error) {
 	}
 
 	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
+// IsWarm reports whether a previous snapshot exists (needed for rate deltas).
+func (n *NETCapturer) IsWarm() bool {
+	return n.prev != nil
 }

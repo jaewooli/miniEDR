@@ -225,6 +225,11 @@ func (c *ProcCapturer) GetVerboseInfo() (string, error) {
 	return strings.TrimSuffix(b.String(), "\n"), nil
 }
 
+// IsWarm reports whether a previous snapshot exists (needed for new/dead deltas).
+func (c *ProcCapturer) IsWarm() bool {
+	return c.prev != nil
+}
+
 func shorten(s string, max int) string {
 	if max <= 0 || len(s) <= max {
 		return s
