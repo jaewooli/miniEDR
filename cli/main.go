@@ -22,8 +22,8 @@ func main() {
 	dashboardTitle := flag.String("dashboard-title", "miniEDR Dashboard", "dashboard page title")
 	dashboardAuto := flag.Bool("dashboard-autorefresh", false, "enable dashboard auto-refresh")
 	dashboardAutoSec := flag.Int("dashboard-refresh-sec", 10, "dashboard auto-refresh interval seconds (default 10)")
-	dashboardEventRefresh := flag.Bool("dashboard-event-refresh", true, "refresh dashboard when captures complete")
-	dashboardCaptureSec := flag.Int("dashboard-capture-sec", 5, "dashboard capture interval seconds")
+	dashboardEventRefresh := flag.Bool("dashboard-event-refresh", true, "refresh dashboard when captures complete (enables per-capturer intervals)")
+	dashboardCaptureSec := flag.Int("dashboard-capture-sec", 0, "dashboard capture interval seconds (0 uses per-capturer defaults)")
 	configPath := flag.String("config", "", "path to config file (default: auto-detect config.yaml)")
 	flag.Parse()
 
@@ -47,7 +47,7 @@ func main() {
 		dash := miniedr.NewDashboardServer(capturers, *dashboardTitle, *verbose)
 		dash.SetAutoRefresh(*dashboardAuto, *dashboardAutoSec)
 		dash.SetEventRefresh(*dashboardEventRefresh)
-		if *dashboardCaptureSec > 0 {
+		if *dashboardCaptureSec >= 0 {
 			dash.SetCaptureInterval(time.Duration(*dashboardCaptureSec) * time.Second)
 		}
 		log.Printf("dashboard listening on %s", *dashboardAddr)

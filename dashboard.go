@@ -27,12 +27,14 @@ type DashboardServer struct {
 	eventRefresh    bool
 	refreshSeconds  int
 	captureInterval time.Duration
+	displayInterval time.Duration
 
 	snapshot    dashboardData
 	hasSnapshot bool
 	clients     map[chan string]struct{}
 	lastPayload map[string]string
 	logs        map[string][]dashboardLogEntry
+	items       map[string]dashboardItem
 }
 
 type dashboardItem struct {
@@ -79,6 +81,7 @@ func NewDashboardServer(capturers Capturers, title string, verbose bool) *Dashbo
 	if title == "" {
 		title = "miniEDR Dashboard"
 	}
+	displayInterval := minCapturerInterval(capturers)
 	return &DashboardServer{
 		Capturers:       capturers,
 		tmpl:            t,
@@ -87,7 +90,8 @@ func NewDashboardServer(capturers Capturers, title string, verbose bool) *Dashbo
 		verbose:         verbose,
 		refreshSeconds:  10,
 		eventRefresh:    true,
-		captureInterval: 5 * time.Second,
+		captureInterval: 0, // per-capturer intervals by default
+		displayInterval: displayInterval,
 		clients:         make(map[chan string]struct{}),
 		lastPayload:     make(map[string]string),
 		logs:            make(map[string][]dashboardLogEntry),
@@ -124,12 +128,18 @@ func (d *DashboardServer) SetEventRefresh(enabled bool) {
 
 // SetCaptureInterval updates the background capture interval.
 func (d *DashboardServer) SetCaptureInterval(interval time.Duration) {
-	if interval <= 0 {
-		return
-	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if interval < 0 {
+		return
+	}
+	if interval == 0 {
+		d.captureInterval = 0
+		d.displayInterval = minCapturerInterval(d.Capturers)
+		return
+	}
 	d.captureInterval = interval
+	d.displayInterval = interval
 }
 
 // CaptureNow forces an immediate capture (useful for tests).
@@ -187,88 +197,82 @@ func (d *DashboardServer) captureAndStore() {
 	autoRefresh := d.autoRefresh
 	refreshSecs := d.refreshSeconds
 	eventRefresh := d.eventRefresh
-	capInterval := d.captureInterval
+	capInterval := d.displayInterval
 	d.mu.RUnlock()
 
-	items := make([]dashboardItem, 0, len(d.Capturers))
-	changedAny := false
 	for _, c := range d.Capturers {
-		name := typeName(c)
+		d.captureSingle(c, nowFn().Format(time.RFC3339), title, verbose, autoRefresh, refreshSecs, eventRefresh, capInterval)
+	}
+}
 
-		if err := c.Capture(); err != nil {
-			items = append(items, dashboardItem{Name: name, Error: fmt.Sprintf("capture error: %v", err)})
-			continue
-		}
+func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose bool, autoRefresh bool, refreshSecs int, eventRefresh bool, capInterval time.Duration) {
+	name := typeName(c)
 
+	item := dashboardItem{Name: name}
+
+	if err := c.Capture(); err != nil {
+		item.Error = fmt.Sprintf("capture error: %v", err)
+	} else {
 		info, err := c.GetInfo()
 		if err != nil {
-			items = append(items, dashboardItem{Name: name, Error: fmt.Sprintf("getinfo error: %v", err)})
-			continue
-		}
-
-		item := dashboardItem{Name: name, Info: info}
-
-		if verbose {
-			if vc, ok := c.(VerboseInfo); ok {
-				verb, err := vc.GetVerboseInfo()
-				if err != nil {
-					item.Error = fmt.Sprintf("getverboseinfo error: %v", err)
-				} else {
-					item.Verbose = verb
+			item.Error = fmt.Sprintf("getinfo error: %v", err)
+		} else {
+			item.Info = info
+			if verbose {
+				if vc, ok := c.(VerboseInfo); ok {
+					verb, err := vc.GetVerboseInfo()
+					if err != nil {
+						item.Error = fmt.Sprintf("getverboseinfo error: %v", err)
+					} else {
+						item.Verbose = verb
+					}
 				}
 			}
+			item.Graphs = append(item.Graphs, deriveGraphs(name, item.Info)...)
+			item.Display = summarizeInfo(name, item.Info)
 		}
-
-		for _, g := range deriveGraphs(name, item.Info) {
-			item.Graphs = append(item.Graphs, g)
-		}
-		item.Display = summarizeInfo(name, item.Info)
-
-		// change detection: compare serialized payload excluding timestamps
-		payload := normalizePayload(item.Info) + "|" + normalizePayload(item.Verbose) + "|" + normalizePayload(item.Error)
-		d.mu.RLock()
-		prev := d.lastPayload[name]
-		d.mu.RUnlock()
-		changed := prev != "" && prev != payload
-		if changed {
-			item.Changed = true
-			changedAny = true
-		} else if prev == "" {
-			changedAny = true
-		}
-
-		items = append(items, item)
 	}
 
-	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	payload := normalizePayload(item.Info) + "|" + normalizePayload(item.Verbose) + "|" + normalizePayload(item.Error)
+	d.mu.RLock()
+	prev := d.lastPayload[name]
+	d.mu.RUnlock()
+	if prev != "" && prev != payload {
+		item.Changed = true
+	}
 
-	ref := nowFn().Format(time.RFC3339)
-
-	for i := range items {
-		name := items[i].Name
-		logs := append([]dashboardLogEntry{}, d.logs[name]...)
-		entry := dashboardLogEntry{
-			At:      ref,
-			Info:    items[i].Info,
-			Verbose: items[i].Verbose,
-			Error:   items[i].Error,
-			Changed: items[i].Changed,
-		}
-		if items[i].Changed || len(logs) == 0 {
-			logs = append(logs, entry)
-			if len(logs) > 20 {
-				logs = logs[len(logs)-20:]
-			}
-		}
-		items[i].Logs = logs
-
-		d.mu.Lock()
-		d.lastPayload[name] = normalizePayload(items[i].Info) + "|" + normalizePayload(items[i].Verbose) + "|" + normalizePayload(items[i].Error)
-		d.logs[name] = logs
-		d.mu.Unlock()
+	entry := dashboardLogEntry{
+		At:      ref,
+		Info:    item.Info,
+		Verbose: item.Verbose,
+		Error:   item.Error,
+		Changed: item.Changed,
 	}
 
 	d.mu.Lock()
+	logs := append([]dashboardLogEntry{}, d.logs[name]...)
+	logs = append(logs, entry)
+	if len(logs) > 20 {
+		logs = logs[len(logs)-20:]
+	}
+	item.Logs = logs
+
+	d.lastPayload[name] = payload
+	d.logs[name] = logs
+
+	// store latest item
+	if d.items == nil {
+		d.items = make(map[string]dashboardItem)
+	}
+	d.items[name] = item
+
+	// rebuild items slice
+	items := make([]dashboardItem, 0, len(d.items))
+	for _, it := range d.items {
+		items = append(items, it)
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+
 	d.snapshot = dashboardData{
 		Title:             title,
 		RefreshedAt:       ref,
@@ -281,9 +285,7 @@ func (d *DashboardServer) captureAndStore() {
 	d.hasSnapshot = true
 	d.mu.Unlock()
 
-	if changedAny {
-		d.broadcast(ref)
-	}
+	d.broadcast(ref)
 }
 
 func (d *DashboardServer) currentSnapshot() dashboardData {
@@ -295,7 +297,22 @@ func (d *DashboardServer) currentSnapshot() dashboardData {
 func (d *DashboardServer) captureLoop(ctx context.Context) {
 	d.mu.RLock()
 	interval := d.captureInterval
+	capturers := append(Capturers{}, d.Capturers...)
 	d.mu.RUnlock()
+
+	// per-capturer intervals when interval == 0
+	if interval <= 0 {
+		var wg sync.WaitGroup
+		for _, c := range capturers {
+			wg.Add(1)
+			go func(c Capturer) {
+				defer wg.Done()
+				d.runPerCapturer(ctx, c)
+			}(c)
+		}
+		wg.Wait()
+		return
+	}
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -319,6 +336,38 @@ func (d *DashboardServer) ensureInitialSnapshot() {
 		return
 	}
 	d.captureAndStore()
+}
+
+func (d *DashboardServer) runPerCapturer(ctx context.Context, c Capturer) {
+	interval := defaultIntervalFor(c)
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+
+	d.mu.RLock()
+	nowFn := d.nowFn
+	title := d.title
+	verbose := d.verbose
+	autoRefresh := d.autoRefresh
+	refreshSecs := d.refreshSeconds
+	eventRefresh := d.eventRefresh
+	capInterval := d.displayInterval
+	d.mu.RUnlock()
+
+	ref := nowFn().Format(time.RFC3339)
+	d.captureSingle(c, ref, title, verbose, autoRefresh, refreshSecs, eventRefresh, capInterval)
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ref := nowFn().Format(time.RFC3339)
+			d.captureSingle(c, ref, title, verbose, autoRefresh, refreshSecs, eventRefresh, capInterval)
+		}
+	}
 }
 
 func (d *DashboardServer) broadcast(msg string) {
@@ -671,7 +720,7 @@ small {
                 {{end}}
               </svg>
             </div>
-            <details>
+            <details data-item="{{.Name}}">
               <summary>Detail log (latest {{len .Logs}})</summary>
               {{range .Logs}}
               <div class="hint">{{.At}}</div>
@@ -703,19 +752,27 @@ small {
     let timer = null;
     let es = null;
 
-	async function refreshView() {
-	  try {
-		const res = await fetch(window.location.href, {cache: 'no-store'});
-		const html = await res.text();
-		const doc = new DOMParser().parseFromString(html, 'text/html');
-		const newMeta = doc.querySelector('.meta');
-		const newGrid = doc.querySelector('.grid');
-		if (newMeta && metaEl) metaEl.innerHTML = newMeta.innerHTML;
-		if (newGrid && gridEl) gridEl.innerHTML = newGrid.innerHTML;
-	  } catch (e) {
-		console.error('refresh failed', e);
-	  }
-	}
+    async function refreshView() {
+      const openDetails = Array.from(document.querySelectorAll('.grid details[open]')).map(el => el.getAttribute('data-item') || '');
+      try {
+        const res = await fetch(window.location.href, {cache: 'no-store'});
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const newMeta = doc.querySelector('.meta');
+        const newGrid = doc.querySelector('.grid');
+        if (newMeta && metaEl) metaEl.innerHTML = newMeta.innerHTML;
+        if (newGrid && gridEl) {
+          gridEl.innerHTML = newGrid.innerHTML;
+          openDetails.forEach(name => {
+            if (!name) return;
+            const el = gridEl.querySelector('details[data-item="' + name + '"]');
+            if (el) el.setAttribute('open', '');
+          });
+        }
+      } catch (e) {
+        console.error('refresh failed', e);
+      }
+    }
 
     function applyAuto() {
       clearInterval(timer);
@@ -783,6 +840,23 @@ func divMS(ms int64) float64 {
 	return float64(ms) / 1000.0
 }
 
+func minCapturerInterval(cs []Capturer) time.Duration {
+	var min time.Duration
+	for _, c := range cs {
+		iv := defaultIntervalFor(c)
+		if iv <= 0 {
+			continue
+		}
+		if min == 0 || iv < min {
+			min = iv
+		}
+	}
+	if min == 0 {
+		min = 5 * time.Second
+	}
+	return min
+}
+
 var tsRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:?\d{2})`)
 
 // normalizePayload removes timestamp-like tokens so change detection ignores time.
@@ -812,9 +886,6 @@ func deriveGraphs(name, info string) []graphInfo {
 			gs = append(gs, graphInfo{Label: "Swap used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
 		}
 	case strings.Contains(up, "CPU"):
-		if pct, ok := extractPercent(info, `instant=([\d\.]+)%`); ok {
-			gs = append(gs, graphInfo{Label: "CPU instant", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
-		}
 		if pct, ok := extractPercent(info, `totalUsage=([\d\.]+)%`); ok {
 			gs = append(gs, graphInfo{Label: "CPU avg", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
 		}
@@ -907,12 +978,8 @@ func summarizeInfo(name, info string) string {
 	switch {
 	case strings.Contains(up, "CPU"):
 		avg := captureGroup(info, `totalUsage=([\d\.]+)%`)
-		inst := captureGroup(info, `instant=([\d\.]+)%`)
 		cores := captureGroup(info, `(cpu0=[\d\.% ]+)`)
 		var parts []string
-		if inst != "" {
-			parts = append(parts, fmt.Sprintf("Instant %s", inst+"%"))
-		}
 		if avg != "" {
 			parts = append(parts, fmt.Sprintf("Avg %s", avg+"%"))
 		}

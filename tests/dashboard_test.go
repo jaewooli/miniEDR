@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -154,7 +155,15 @@ func TestDashboardEventStream(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/", ds)
 	mux.HandleFunc("/events", ds.ServeEvents)
-	server := httptest.NewServer(mux)
+	l, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("skip event stream test, listen unavailable: %v", err)
+	}
+	server := &httptest.Server{
+		Listener: l,
+		Config:   &http.Server{Handler: mux},
+	}
+	server.Start()
 	defer server.Close()
 
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/events", nil)

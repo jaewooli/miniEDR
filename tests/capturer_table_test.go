@@ -21,22 +21,46 @@ func TestCapturerTableDriven(t *testing.T) {
 		run  func(t *testing.T)
 	}{
 		{
-			name: "cpu instant percent included",
+			name: "cpu avg percent included",
 			run: func(t *testing.T) {
+				call := 0
+				perCore := [][]cpu.TimesStat{
+					{
+						{User: 1, System: 1, Idle: 8},
+						{User: 1, System: 1, Idle: 8},
+					},
+					{
+						{User: 3, System: 2, Idle: 9},
+						{User: 2, System: 2, Idle: 10},
+					},
+				}
+				total := [][]cpu.TimesStat{
+					{
+						{User: 2, System: 2, Idle: 16},
+					},
+					{
+						{User: 6, System: 4, Idle: 17},
+					},
+				}
+
 				c := &miniedr.CPUCapturer{
 					Now: time.Now,
 					TimesFn: func(percpu bool) ([]cpu.TimesStat, error) {
-						if percpu {
-							return []cpu.TimesStat{{User: 1, System: 1, Idle: 8}, {User: 1, System: 1, Idle: 8}}, nil
+						idx := call / 2
+						call++
+						if idx >= len(perCore) {
+							return nil, fmt.Errorf("unexpected times call %d", call)
 						}
-						return []cpu.TimesStat{{User: 2, System: 2, Idle: 16}}, nil
+						if percpu {
+							return perCore[idx], nil
+						}
+						return total[idx], nil
 					},
-					PercentFn: func(d time.Duration, percpu bool) ([]float64, error) { return []float64{42.0}, nil },
 				}
 				_ = c.Capture()
 				_ = c.Capture()
 				info, _ := c.GetInfo()
-				assertContains(t, info, "instant=42.00%")
+				assertContains(t, info, "totalUsage=85.71%")
 			},
 		},
 		{
