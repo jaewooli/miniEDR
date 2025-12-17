@@ -266,8 +266,8 @@ func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose b
 	d.mu.Lock()
 	logs := append([]dashboardLogEntry{}, d.logs[name]...)
 	logs = append(logs, entry)
-	if len(logs) > 20 {
-		logs = logs[len(logs)-20:]
+	if len(logs) > 50 {
+		logs = logs[len(logs)-50:]
 	}
 	item.Logs = logs
 
