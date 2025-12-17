@@ -272,7 +272,14 @@ func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose b
 	for _, it := range d.items {
 		items = append(items, it)
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	sort.Slice(items, func(i, j int) bool {
+		gi := len(items[i].Graphs)
+		gj := len(items[j].Graphs)
+		if gi != gj {
+			return gi < gj
+		}
+		return items[i].Name < items[j].Name
+	})
 
 	d.snapshot = dashboardData{
 		Title:             title,
