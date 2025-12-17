@@ -548,8 +548,8 @@ button:hover {
   margin-top: 6px;
 }
  .gauge {
-  width: 120px;
-  height: 120px;
+  width: 150px;
+  height: 150px;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -567,8 +567,8 @@ button:hover {
 }
 .gauge-center {
   position: relative;
-  width: 78px;
-  height: 78px;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
   background: #0b1220;
   display: flex;
@@ -579,11 +579,15 @@ button:hover {
   color: #e5e7eb;
   box-shadow: inset 0 0 0 1px rgba(148,163,184,0.3);
   font-weight: 700;
+  text-align: center;
 }
 .gauge-label {
-  font-size: 12px;
+  font-size: 13px;
   color: #94a3b8;
   font-weight: 600;
+  max-width: 110px;
+  line-height: 1.2;
+  word-break: break-word;
 }
 svg.timeline line {
   stroke: rgba(148, 163, 184, 0.6);
@@ -682,7 +686,7 @@ small {
             <div class="error">{{.Error}}</div>
           {{else}}
             {{if .Graphs}}
-            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
               {{range .Graphs}}
               <div class="gauge" style="--val: {{printf "%.1f" .Display}}">
                 <div class="gauge-ring"></div>
