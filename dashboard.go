@@ -762,7 +762,11 @@ small {
     let es = null;
 
     async function refreshView() {
-      const openDetails = Array.from(document.querySelectorAll('.grid details[open]')).map(el => el.getAttribute('data-item') || '');
+      const detailState = Array.from(document.querySelectorAll('.grid details')).map(el => ({
+        name: el.getAttribute('data-item') || '',
+        open: el.hasAttribute('open'),
+        scroll: el.scrollTop,
+      }));
       try {
         const res = await fetch(window.location.href, {cache: 'no-store'});
         const html = await res.text();
@@ -772,10 +776,14 @@ small {
         if (newMeta && metaEl) metaEl.innerHTML = newMeta.innerHTML;
         if (newGrid && gridEl) {
           gridEl.innerHTML = newGrid.innerHTML;
-          openDetails.forEach(name => {
-            if (!name) return;
-            const el = gridEl.querySelector('details[data-item="' + name + '"]');
-            if (el) el.setAttribute('open', '');
+          detailState.forEach(state => {
+            if (!state.name) return;
+            const el = gridEl.querySelector('details[data-item="' + state.name + '"]');
+            if (!el) return;
+            if (state.open) {
+              el.setAttribute('open', '');
+            }
+            el.scrollTop = state.scroll;
           });
         }
       } catch (e) {
