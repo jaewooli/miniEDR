@@ -77,6 +77,7 @@ func NewDashboardServer(capturers Capturers, title string, verbose bool) *Dashbo
 	t := template.Must(template.New("dashboard").Funcs(template.FuncMap{
 		"divMS":  divMS,
 		"chartX": chartX,
+		"hasNL":  func(s string) bool { return strings.Contains(s, "\n") },
 	}).Parse(dashboardHTML))
 	if title == "" {
 		title = "miniEDR Dashboard"
@@ -589,6 +590,9 @@ button:hover {
   line-height: 1.2;
   word-break: break-word;
 }
+.gauge-label.gauge-label-small {
+  font-size: 12px;
+}
 svg.timeline line {
   stroke: rgba(148, 163, 184, 0.6);
   stroke-width: 2;
@@ -697,7 +701,7 @@ small {
                 <div class="gauge-ring"></div>
                 <div class="gauge-center">
                   <div>{{if .ValueText}}{{.ValueText}}{{else}}{{printf "%.1f%%" .Value}}{{end}}</div>
-                  <div class="gauge-label">{{.Label}}</div>
+                  <div class="gauge-label {{if hasNL .Label}}gauge-label-small{{end}}">{{.Label}}</div>
                 </div>
               </div>
               {{end}}
@@ -919,8 +923,43 @@ func deriveGraphs(name, info string) []graphInfo {
 				pct = 100
 			}
 			pct = clampGraphValue(pct)
-			label := fmt.Sprintf("NET %s/s", humanBytes(total))
-			gs = append(gs, graphInfo{Label: label, Value: pct, Display: pct, ValueText: label})
+			rateText := fmt.Sprintf("%s/s", humanBytes(total))
+			gs = append(gs, graphInfo{Label: "NET\nthroughput", Value: pct, Display: pct, ValueText: rateText})
+		}
+	case strings.Contains(up, "CONN"):
+		total, _ := extractInt(info, `conns=([\d]+)`)
+		newCnt, _ := extractInt(info, `new=([\d]+)`)
+		deadCnt, _ := extractInt(info, `dead=([\d]+)`)
+		gs = append(gs,
+			countGauge("Conns", total),
+			countGauge("New conns", newCnt),
+			countGauge("Closed", deadCnt),
+		)
+	case strings.Contains(up, "FILEWATCH"):
+		if v, ok := extractInt(info, `events=([\d]+)`); ok {
+			gs = append(gs, countGauge("File events", v))
+		}
+		if v, ok := extractInt(info, `files=([\d]+)`); ok {
+			gs = append(gs, countGauge("Files", v))
+		}
+	case strings.Contains(up, "PROC"):
+		total, _ := extractInt(info, `procs=([\d]+)`)
+		newCnt, _ := extractInt(info, `new=([\d]+)`)
+		deadCnt, _ := extractInt(info, `dead=([\d]+)`)
+		gs = append(gs,
+			countGauge("Procs", total),
+			countGauge("New procs", newCnt),
+			countGauge("Dead procs", deadCnt),
+		)
+	case strings.Contains(up, "PERSIST"):
+		if v, ok := extractInt(info, `added=([\d]+)`); ok {
+			gs = append(gs, countGauge("Added", v))
+		}
+		if v, ok := extractInt(info, `changed=([\d]+)`); ok {
+			gs = append(gs, countGauge("Changed", v))
+		}
+		if v, ok := extractInt(info, `removed=([\d]+)`); ok {
+			gs = append(gs, countGauge("Removed", v))
 		}
 	}
 	return gs
@@ -943,6 +982,29 @@ func extractPercent(s, pattern string) (float64, bool) {
 		v = 100
 	}
 	return v, true
+}
+
+func extractInt(s, pattern string) (int, bool) {
+	re := regexp.MustCompile(pattern)
+	m := re.FindStringSubmatch(s)
+	if len(m) != 2 {
+		return 0, false
+	}
+	v, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, false
+	}
+	return v, true
+}
+
+func countGauge(label string, val int) graphInfo {
+	v := float64(val)
+	return graphInfo{
+		Label:     label,
+		Value:     v,
+		Display:   clampGraphValue(v),
+		ValueText: fmt.Sprintf("%d", val),
+	}
 }
 
 func clampGraphValue(v float64) float64 {
