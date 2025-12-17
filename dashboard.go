@@ -42,7 +42,7 @@ type dashboardItem struct {
 	Error   string
 	Changed bool
 	Logs    []dashboardLogEntry
-	Graph   graphInfo
+	Graphs  []graphInfo
 	Display string
 }
 
@@ -219,8 +219,8 @@ func (d *DashboardServer) captureAndStore() {
 			}
 		}
 
-		if gi := deriveGraph(name, item.Info); gi.Label != "" {
-			item.Graph = gi
+		for _, g := range deriveGraphs(name, item.Info) {
+			item.Graphs = append(item.Graphs, g)
 		}
 		item.Display = summarizeInfo(name, item.Info)
 
@@ -632,13 +632,17 @@ small {
           {{if .Error}}
             <div class="error">{{.Error}}</div>
           {{else}}
-            {{if .Graph.Label}}
-            <div class="gauge" style="--val: {{printf "%.1f" .Graph.Display}}">
-              <div class="gauge-ring"></div>
-              <div class="gauge-center">
-                <div>{{if .Graph.ValueText}}{{.Graph.ValueText}}{{else}}{{printf "%.1f%%" .Graph.Value}}{{end}}</div>
-                <div class="gauge-label">{{.Graph.Label}}</div>
+            {{if .Graphs}}
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+              {{range .Graphs}}
+              <div class="gauge" style="--val: {{printf "%.1f" .Display}}">
+                <div class="gauge-ring"></div>
+                <div class="gauge-center">
+                  <div>{{if .ValueText}}{{.ValueText}}{{else}}{{printf "%.1f%%" .Value}}{{end}}</div>
+                  <div class="gauge-label">{{.Label}}</div>
+                </div>
               </div>
+              {{end}}
             </div>
             {{end}}
             <div>
@@ -796,24 +800,29 @@ func chartX(idx, total int) int {
 	return 10 + idx*step
 }
 
-func deriveGraph(name, info string) graphInfo {
+func deriveGraphs(name, info string) []graphInfo {
+	up := strings.ToUpper(name)
+	var gs []graphInfo
 	switch {
-	case strings.Contains(name, "MEM"):
+	case strings.Contains(up, "MEM"):
 		if pct, ok := extractPercent(info, `UsedApprox=[^()]*\(([\d\.]+)%\)`); ok {
-			return graphInfo{Label: "RAM used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
+			gs = append(gs, graphInfo{Label: "RAM used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
 		}
-	case strings.Contains(name, "CPU"):
+		if pct, ok := extractPercent(info, `Swap: Total=[\d]+B Used=[\d]+B \(([\d\.]+)%\)`); ok {
+			gs = append(gs, graphInfo{Label: "Swap used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
+		}
+	case strings.Contains(up, "CPU"):
 		if pct, ok := extractPercent(info, `instant=([\d\.]+)%`); ok {
-			return graphInfo{Label: "CPU instant", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
+			gs = append(gs, graphInfo{Label: "CPU instant", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
 		}
 		if pct, ok := extractPercent(info, `totalUsage=([\d\.]+)%`); ok {
-			return graphInfo{Label: "CPU total", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
+			gs = append(gs, graphInfo{Label: "CPU avg", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
 		}
-	case strings.Contains(name, "DISK"):
+	case strings.Contains(up, "DISK"):
 		if pct, ok := extractPercent(info, `used=([\d\.]+)%`); ok {
-			return graphInfo{Label: "DISK used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
+			gs = append(gs, graphInfo{Label: "DISK used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
 		}
-	case strings.Contains(name, "NET"):
+	case strings.Contains(up, "NET"):
 		if rx, tx, ok := extractRates(info); ok {
 			total := rx + tx
 			// scale vs 10MB/s budget (closer to Task Manager small-host view)
@@ -823,10 +832,10 @@ func deriveGraph(name, info string) graphInfo {
 			}
 			pct = clampGraphValue(pct)
 			label := fmt.Sprintf("NET %s/s", humanBytes(total))
-			return graphInfo{Label: label, Value: pct, Display: pct, ValueText: label}
+			gs = append(gs, graphInfo{Label: label, Value: pct, Display: pct, ValueText: label})
 		}
 	}
-	return graphInfo{}
+	return gs
 }
 
 func extractPercent(s, pattern string) (float64, bool) {
