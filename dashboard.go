@@ -671,6 +671,9 @@ svg.timeline line {
   stroke: rgba(148, 163, 184, 0.6);
   stroke-width: 2;
 }
+.timeline {
+  width: 100%;
+}
 svg.timeline circle {
   fill: #22d3ee;
   stroke: #0b1220;
@@ -822,8 +825,8 @@ small {
             {{if .Logs}}
             {{ $item := . }}
             <div class="chart">
-              <svg class="timeline" width="220" height="34">
-                <line x1="10" y1="17" x2="210" y2="17"></line>
+              <svg class="timeline" width="100%" height="34" viewBox="0 0 220 34" preserveAspectRatio="xMidYMid meet">
+                <line x1="0" y1="17" x2="220" y2="17"></line>
                 {{ $total := len .Logs }}
                 {{range $i, $log := .Logs}}
                   {{ $cls := "" }}
@@ -990,11 +993,11 @@ func normalizePayload(s string) string {
 
 func chartX(idx, total int) int {
 	if total <= 1 {
-		return 10
+		return 0
 	}
-	span := 200
+	span := 220
 	step := span / (total - 1)
-	return 10 + idx*step
+	return idx * step
 }
 
 func deriveGraphs(name, info string) []graphInfo {
