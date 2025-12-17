@@ -29,12 +29,13 @@ type DashboardServer struct {
 	captureInterval time.Duration
 	displayInterval time.Duration
 
-	snapshot    dashboardData
-	hasSnapshot bool
-	clients     map[chan string]struct{}
-	lastPayload map[string]string
-	logs        map[string][]dashboardLogEntry
-	items       map[string]dashboardItem
+	snapshot      dashboardData
+	hasSnapshot   bool
+	clients       map[chan string]struct{}
+	lastPayload   map[string]string
+	logs          map[string][]dashboardLogEntry
+	items         map[string]dashboardItem
+	itemIntervals map[string]time.Duration
 }
 
 type dashboardItem struct {
@@ -265,7 +266,11 @@ func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose b
 	if d.items == nil {
 		d.items = make(map[string]dashboardItem)
 	}
+	if d.itemIntervals == nil {
+		d.itemIntervals = make(map[string]time.Duration)
+	}
 	d.items[name] = item
+	d.itemIntervals[name] = defaultIntervalFor(c)
 
 	// rebuild items slice
 	items := make([]dashboardItem, 0, len(d.items))
@@ -273,10 +278,10 @@ func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose b
 		items = append(items, it)
 	}
 	sort.Slice(items, func(i, j int) bool {
-		gi := len(items[i].Graphs)
-		gj := len(items[j].Graphs)
-		if gi != gj {
-			return gi < gj
+		ii := d.itemIntervals[items[i].Name]
+		ij := d.itemIntervals[items[j].Name]
+		if ii != ij {
+			return ii < ij
 		}
 		return items[i].Name < items[j].Name
 	})
@@ -946,9 +951,6 @@ func deriveGraphs(name, info string) []graphInfo {
 		if v, ok := extractInt(info, `events=([\d]+)`); ok {
 			gs = append(gs, countGauge("File events", v))
 		}
-		if v, ok := extractInt(info, `files=([\d]+)`); ok {
-			gs = append(gs, countGauge("Files", v))
-		}
 	case strings.Contains(up, "PROC"):
 		total, _ := extractInt(info, `procs=([\d]+)`)
 		newCnt, _ := extractInt(info, `new=([\d]+)`)
@@ -1010,7 +1012,18 @@ func countGauge(label string, val int) graphInfo {
 		Label:     label,
 		Value:     v,
 		Display:   clampGraphValue(v),
-		ValueText: fmt.Sprintf("%d", val),
+		ValueText: formatCount(val),
+	}
+}
+
+func formatCount(v int) string {
+	switch {
+	case v >= 1_000_000:
+		return fmt.Sprintf("%.1fm", float64(v)/1_000_000)
+	case v >= 1_000:
+		return fmt.Sprintf("%.1fk", float64(v)/1_000)
+	default:
+		return fmt.Sprintf("%d", v)
 	}
 }
 
