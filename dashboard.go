@@ -648,6 +648,11 @@ small {
   margin-top: 4px;
   white-space: pre-wrap;
 }
+.detail-box {
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 4px;
+}
 </style>
 </head>
 <body>
@@ -724,7 +729,7 @@ small {
                 {{end}}
               </svg>
             </div>
-            <details data-item="{{.Name}}">
+            <details data-item="{{.Name}}" class="detail-box">
               <summary>Detail log (latest {{len .Logs}})</summary>
               {{range .Logs}}
               <div class="hint">{{.At}}</div>
