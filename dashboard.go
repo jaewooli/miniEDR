@@ -43,6 +43,7 @@ type dashboardItem struct {
 	Changed bool
 	Logs    []dashboardLogEntry
 	Graph   graphInfo
+	Display string
 }
 
 type dashboardLogEntry struct {
@@ -221,6 +222,7 @@ func (d *DashboardServer) captureAndStore() {
 		if gi := deriveGraph(name, item.Info); gi.Label != "" {
 			item.Graph = gi
 		}
+		item.Display = summarizeInfo(name, item.Info)
 
 		// change detection: compare serialized payload excluding timestamps
 		payload := normalizePayload(item.Info) + "|" + normalizePayload(item.Verbose) + "|" + normalizePayload(item.Error)
@@ -587,6 +589,12 @@ small {
   color: #94a3b8;
   font-size: 12px;
 }
+.summary {
+  color: #e5e7eb;
+  font-weight: 600;
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
 </style>
 </head>
 <body>
@@ -634,8 +642,8 @@ small {
             </div>
             {{end}}
             <div>
-              <small>info</small>
-              <pre>{{.Info}}</pre>
+              <small>summary</small>
+              <div class="summary">{{.Display}}</div>
             </div>
             {{if .Verbose}}
             <div>
@@ -795,11 +803,11 @@ func deriveGraph(name, info string) graphInfo {
 			return graphInfo{Label: "RAM used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
 		}
 	case strings.Contains(name, "CPU"):
-		if pct, ok := extractPercent(info, `totalUsage=([\d\.]+)%`); ok {
-			return graphInfo{Label: "CPU total", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
-		}
 		if pct, ok := extractPercent(info, `instant=([\d\.]+)%`); ok {
 			return graphInfo{Label: "CPU instant", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
+		}
+		if pct, ok := extractPercent(info, `totalUsage=([\d\.]+)%`); ok {
+			return graphInfo{Label: "CPU total", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
 		}
 	case strings.Contains(name, "DISK"):
 		if pct, ok := extractPercent(info, `used=([\d\.]+)%`); ok {
@@ -883,4 +891,90 @@ func humanBytes(v float64) string {
 	default:
 		return fmt.Sprintf("%.0fB", v)
 	}
+}
+
+func summarizeInfo(name, info string) string {
+	up := strings.ToUpper(name)
+	switch {
+	case strings.Contains(up, "CPU"):
+		avg := captureGroup(info, `totalUsage=([\d\.]+)%`)
+		inst := captureGroup(info, `instant=([\d\.]+)%`)
+		cores := captureGroup(info, `(cpu0=[\d\.% ]+)`)
+		var parts []string
+		if inst != "" {
+			parts = append(parts, fmt.Sprintf("Instant %s", inst+"%"))
+		}
+		if avg != "" {
+			parts = append(parts, fmt.Sprintf("Avg %s", avg+"%"))
+		}
+		if cores != "" {
+			parts = append(parts, cores)
+		}
+		return strings.Join(parts, " · ")
+	case strings.Contains(up, "MEM"):
+		used := captureGroup(info, `UsedApprox=[^()]*\(([\d\.]+)%\)`)
+		total := captureGroup(info, `RAM: Total=([\d]+)B`)
+		swapUsed, swapPct := captureGroup2(info, `Swap: Total=[\d]+B Used=([\d]+)B \(([\d\.]+)%\)`)
+		var parts []string
+		if used != "" {
+			parts = append(parts, fmt.Sprintf("RAM %s%%", used))
+		}
+		if total != "" {
+			parts = append(parts, fmt.Sprintf("Total %s", humanBytesString(total)))
+		}
+		if swapUsed != "" {
+			parts = append(parts, fmt.Sprintf("Swap %s (%s%%)", humanBytesString(swapUsed), swapPct))
+		}
+		return strings.Join(parts, " · ")
+	case strings.Contains(up, "DISK"):
+		used := captureGroup(info, `used=([\d\.]+)%`)
+		io := captureGroup(info, `ioRate=([^,]+)`)
+		var parts []string
+		if used != "" {
+			parts = append(parts, fmt.Sprintf("Used %s%%", used))
+		}
+		if io != "" {
+			parts = append(parts, io)
+		}
+		return strings.Join(parts, " · ")
+	case strings.Contains(up, "NET"):
+		rx := captureGroup(info, `rxRate=([^,]+)`)
+		tx := captureGroup(info, `txRate=([^\)]+)`)
+		var parts []string
+		if rx != "" {
+			parts = append(parts, "RX "+rx)
+		}
+		if tx != "" {
+			parts = append(parts, "TX "+tx)
+		}
+		return strings.Join(parts, " · ")
+	default:
+		return info
+	}
+}
+
+func captureGroup(s, pattern string) string {
+	re := regexp.MustCompile(pattern)
+	m := re.FindStringSubmatch(s)
+	if len(m) >= 2 {
+		return m[1]
+	}
+	return ""
+}
+
+func captureGroup2(s, pattern string) (string, string) {
+	re := regexp.MustCompile(pattern)
+	m := re.FindStringSubmatch(s)
+	if len(m) >= 3 {
+		return m[1], m[2]
+	}
+	return "", ""
+}
+
+func humanBytesString(s string) string {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return ""
+	}
+	return humanBytes(v)
 }
