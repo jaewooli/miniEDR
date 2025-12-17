@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -28,6 +29,7 @@ type DashboardServer struct {
 	snapshot    dashboardData
 	hasSnapshot bool
 	clients     map[chan string]struct{}
+	lastPayload map[string]string
 }
 
 type dashboardItem struct {
@@ -35,6 +37,7 @@ type dashboardItem struct {
 	Info    string
 	Verbose string
 	Error   string
+	Changed bool
 }
 
 type dashboardData struct {
@@ -64,6 +67,7 @@ func NewDashboardServer(capturers Capturers, title string, verbose bool) *Dashbo
 		eventRefresh:    true,
 		captureInterval: 5 * time.Second,
 		clients:         make(map[chan string]struct{}),
+		lastPayload:     make(map[string]string),
 	}
 }
 
@@ -190,6 +194,18 @@ func (d *DashboardServer) captureAndStore() {
 				}
 			}
 		}
+
+		// change detection: compare serialized payload excluding timestamps
+		payload := normalizePayload(item.Info) + "|" + normalizePayload(item.Verbose) + "|" + normalizePayload(item.Error)
+		d.mu.RLock()
+		prev := d.lastPayload[name]
+		d.mu.RUnlock()
+		if prev != "" && prev != payload {
+			item.Changed = true
+		}
+		d.mu.Lock()
+		d.lastPayload[name] = payload
+		d.mu.Unlock()
 
 		items = append(items, item)
 	}
@@ -405,6 +421,10 @@ button:hover {
   font-size: 18px;
   letter-spacing: 0.3px;
 }
+.changed {
+  background: linear-gradient(120deg, #22c55e, #10b981);
+  color: #0b1220;
+}
 .pill {
   display: inline-block;
   padding: 4px 10px;
@@ -475,6 +495,7 @@ small {
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <h2>{{.Name}}</h2>
             {{if .Error}}<span class="pill" style="background:#f87171;color:#0b1220;">error</span>{{end}}
+            {{if .Changed}}<span class="pill changed">changed</span>{{end}}
           </div>
           {{if .Error}}
             <div class="error">{{.Error}}</div>
@@ -570,4 +591,12 @@ func divMS(ms int64) float64 {
 		return 0
 	}
 	return float64(ms) / 1000.0
+}
+
+var tsRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:?\d{2})`)
+
+// normalizePayload removes timestamp-like tokens so change detection ignores time.
+func normalizePayload(s string) string {
+	out := tsRe.ReplaceAllString(s, "<ts>")
+	return out
 }

@@ -20,6 +20,28 @@ type dashStub struct {
 	err     error
 }
 
+type changingStub struct {
+	name  string
+	infos []string
+	idx   int
+}
+
+func (c *changingStub) Capture() error {
+	if c.idx < 0 {
+		c.idx = 0
+	} else if c.idx < len(c.infos)-1 {
+		c.idx++
+	}
+	return nil
+}
+func (c *changingStub) GetInfo() (string, error) {
+	if c.idx < 0 {
+		return "", nil
+	}
+	return c.infos[c.idx], nil
+}
+func (c *changingStub) GetVerboseInfo() (string, error) { return "", nil }
+
 func (d *dashStub) Capture() error { return d.err }
 func (d *dashStub) GetInfo() (string, error) {
 	if d.err != nil {
@@ -58,6 +80,57 @@ func TestDashboardSnapshotAndRender(t *testing.T) {
 	assertContains(t, body, "mem info")
 	assertContains(t, body, "mem verbose")
 	assertContains(t, body, now.Format("2006-01-02T15:04:05"))
+}
+
+func TestDashboardChangedFlag(t *testing.T) {
+	changing := &changingStub{name: "cpu", infos: []string{"cpu info v1", "cpu info v2"}, idx: -1}
+	ds := miniedr.NewDashboardServer(miniedr.Capturers{changing}, "TestDash", false)
+	ds.SetNowFunc(func() time.Time { return time.Unix(100, 0) })
+
+	ds.CaptureNow()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w1 := httptest.NewRecorder()
+	ds.ServeHTTP(w1, req)
+	body1 := readBody(t, w1.Result())
+	assertContains(t, body1, "cpu info v1")
+	if strings.Contains(body1, "pill changed") {
+		t.Fatalf("did not expect changed pill on first render")
+	}
+
+	ds.CaptureNow()
+	w2 := httptest.NewRecorder()
+	ds.ServeHTTP(w2, req)
+	body2 := readBody(t, w2.Result())
+	assertContains(t, body2, "cpu info v2")
+	assertContains(t, body2, "pill changed")
+}
+
+func TestDashboardChangedIgnoresTimestamps(t *testing.T) {
+	changing := &changingStub{name: "cpu", infos: []string{
+		"CPUSnapshot(at=1970-01-01T00:00:10Z, totalUsage=10%)",
+		"CPUSnapshot(at=1970-01-01T00:00:20Z, totalUsage=10%)",
+	}}
+	ds := miniedr.NewDashboardServer(miniedr.Capturers{changing}, "TestDash", false)
+	ds.SetNowFunc(func() time.Time { return time.Unix(100, 0) })
+
+	ds.CaptureNow()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w1 := httptest.NewRecorder()
+	ds.ServeHTTP(w1, req)
+	body1 := readBody(t, w1.Result())
+	assertContains(t, body1, "totalUsage=10%")
+	if strings.Contains(body1, "pill changed") {
+		t.Fatalf("did not expect changed pill on first render")
+	}
+
+	ds.CaptureNow()
+	w2 := httptest.NewRecorder()
+	ds.ServeHTTP(w2, req)
+	body2 := readBody(t, w2.Result())
+	assertContains(t, body2, "totalUsage=10%")
+	if strings.Contains(body2, "pill changed") {
+		t.Fatalf("timestamp-only differences should not mark changed")
+	}
 }
 
 func readBody(t *testing.T, res *http.Response) string {

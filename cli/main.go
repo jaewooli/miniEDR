@@ -18,10 +18,10 @@ import (
 func main() {
 	verbose := flag.Bool("verbose", false, "print detailed capture output")
 	dashboard := flag.Bool("dashboard", true, "run dashboard server; set false to run agent-only")
-	dashboardAddr := flag.String("dashboard-addr", ":8080", "dashboard listen addr")
+	dashboardAddr := flag.String("dashboard-addr", ":8090", "dashboard listen addr")
 	dashboardTitle := flag.String("dashboard-title", "miniEDR Dashboard", "dashboard page title")
 	dashboardAuto := flag.Bool("dashboard-autorefresh", false, "enable dashboard auto-refresh")
-	dashboardAutoSec := flag.Int("dashboard-refresh-sec", 10, "dashboard auto-refresh interval seconds")
+	dashboardAutoSec := flag.Int("dashboard-refresh-sec", 10, "dashboard auto-refresh interval seconds (default 10)")
 	dashboardEventRefresh := flag.Bool("dashboard-event-refresh", true, "refresh dashboard when captures complete")
 	dashboardCaptureSec := flag.Int("dashboard-capture-sec", 5, "dashboard capture interval seconds")
 	configPath := flag.String("config", "", "path to config file (default: auto-detect config.yaml)")
