@@ -203,6 +203,47 @@ func (w *FileWatchCapturer) GetInfo() (string, error) {
 	), nil
 }
 
+// GetVerboseInfo lists watch roots and recent file events.
+func (w *FileWatchCapturer) GetVerboseInfo() (string, error) {
+	if w.curr == nil {
+		return "FileWatchSnapshot(verbose-empty)", nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "FileWatchSnapshot(at=%s, paths=%d, files=%d, events=%d, maxFiles=%d)\n",
+		w.curr.At.Format(time.RFC3339),
+		len(w.Paths),
+		len(w.curr.Files),
+		len(w.curr.Events),
+		w.MaxFiles,
+	)
+
+	if len(w.Paths) > 0 {
+		fmt.Fprintf(&b, "Roots: %s\n", strings.Join(w.Paths, ", "))
+	}
+	if len(w.Extensions) > 0 {
+		fmt.Fprintf(&b, "Extensions: %s\n", strings.Join(w.Extensions, ", "))
+	}
+
+	if len(w.curr.Events) > 0 {
+		fmt.Fprintf(&b, "Events:\n")
+		limit := min(20, len(w.curr.Events))
+		for i := 0; i < limit; i++ {
+			e := w.curr.Events[i]
+			meta := ""
+			if e.Meta != nil {
+				meta = fmt.Sprintf(" size=%d mode=%s mtime=%s", e.Meta.Size, e.Meta.Mode, e.Meta.ModTime.Format(time.RFC3339))
+			}
+			fmt.Fprintf(&b, "- %s %s%s\n", e.Type, e.Path, meta)
+		}
+		if extra := len(w.curr.Events) - limit; extra > 0 {
+			fmt.Fprintf(&b, "  ... (+%d more)\n", extra)
+		}
+	}
+
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
 func defaultWatchPaths() []string {
 	var paths []string
 

@@ -12,15 +12,15 @@ capturers:
 
   filewatch:
     enabled: true
-    paths: ["/home/jaeu1341/06_GO_PROJECT/01_PSUTIL"]
-    max_files: 50000
+    paths: ["/home/jaeu1341/"]
+    max_files: 100000
 
   mem:
     enabled: true
 
   net:
     enabled: true
-
+  
   persist:
     enabled: true
 

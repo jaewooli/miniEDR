@@ -3,6 +3,8 @@ package miniedr
 import (
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	gnet "github.com/shirou/gopsutil/v4/net"
@@ -86,4 +88,59 @@ func (n *NETCapturer) GetInfo() (string, error) {
 		len(n.curr.PerIF),
 		rxRate, txRate,
 	), nil
+}
+
+// GetVerboseInfo returns per-interface traffic including packet/error deltas.
+func (n *NETCapturer) GetVerboseInfo() (string, error) {
+	if n.curr == nil {
+		return "NETSnapshot(verbose-empty)", nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "NETSnapshot(at=%s)\n", n.curr.At.Format(time.RFC3339))
+
+	sec := 0.0
+	if n.prev != nil {
+		sec = n.curr.At.Sub(n.prev.At).Seconds()
+	}
+
+	names := make([]string, 0, len(n.curr.PerIF))
+	for name := range n.curr.PerIF {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		cur := n.curr.PerIF[name]
+		if sec <= 0 || n.prev == nil {
+			fmt.Fprintf(&b, "- %s rx=%dB tx=%dB pkts=%d/%d err=%d/%d drop=%d/%d\n",
+				name, cur.BytesRecv, cur.BytesSent, cur.PacketsRecv, cur.PacketsSent,
+				cur.Errin, cur.Errout, cur.Dropin, cur.Dropout)
+			continue
+		}
+		prev, ok := n.prev.PerIF[name]
+		if !ok {
+			fmt.Fprintf(&b, "- %s (no-prev) rx=%dB tx=%dB pkts=%d/%d err=%d/%d drop=%d/%d\n",
+				name, cur.BytesRecv, cur.BytesSent, cur.PacketsRecv, cur.PacketsSent,
+				cur.Errin, cur.Errout, cur.Dropin, cur.Dropout)
+			continue
+		}
+
+		rx := deltaUint64(prev.BytesRecv, cur.BytesRecv)
+		tx := deltaUint64(prev.BytesSent, cur.BytesSent)
+		rxPk := deltaUint64(prev.PacketsRecv, cur.PacketsRecv)
+		txPk := deltaUint64(prev.PacketsSent, cur.PacketsSent)
+		errIn := deltaUint64(prev.Errin, cur.Errin)
+		errOut := deltaUint64(prev.Errout, cur.Errout)
+		dropIn := deltaUint64(prev.Dropin, cur.Dropin)
+		dropOut := deltaUint64(prev.Dropout, cur.Dropout)
+
+		fmt.Fprintf(&b, "- %s rx=%.0fB/s tx=%.0fB/s pkts=%.1f/%.1f per sec err=%d/%d drop=%d/%d\n",
+			name,
+			float64(rx)/sec, float64(tx)/sec,
+			float64(rxPk)/sec, float64(txPk)/sec,
+			errIn, errOut, dropIn, dropOut)
+	}
+
+	return strings.TrimSuffix(b.String(), "\n"), nil
 }

@@ -3,6 +3,8 @@ package miniedr
 import (
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	gnet "github.com/shirou/gopsutil/v4/net"
@@ -146,4 +148,104 @@ func (c *ConnCapturer) GetInfo() (string, error) {
 		len(c.curr.New),
 		len(c.curr.Dead),
 	), nil
+}
+
+// GetVerboseInfo returns connection states and samples of new/dead entries.
+func (c *ConnCapturer) GetVerboseInfo() (string, error) {
+	if c.curr == nil {
+		return "ConnSnapshot(verbose-empty)", nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "ConnSnapshot(at=%s, kind=%s, total=%d)\n", c.curr.At.Format(time.RFC3339), c.Kind, len(c.curr.Conns))
+
+	// State distribution
+	if len(c.curr.Conns) > 0 {
+		stateCnt := make(map[string]int)
+		for _, cs := range c.curr.Conns {
+			stateCnt[cs.Status]++
+		}
+		states := make([]string, 0, len(stateCnt))
+		for st, n := range stateCnt {
+			states = append(states, fmt.Sprintf("%s=%d", st, n))
+		}
+		sort.Strings(states)
+		fmt.Fprintf(&b, "States: %s\n", strings.Join(states, " "))
+	}
+
+	if len(c.curr.New) > 0 {
+		fmt.Fprintf(&b, "New:\n")
+		lines := formatConnIDs(c.curr.New, c.curr.Conns, 10)
+		for _, ln := range lines {
+			fmt.Fprintf(&b, "- %s\n", ln)
+		}
+		if extra := len(c.curr.New) - len(lines); extra > 0 {
+			fmt.Fprintf(&b, "  ... (+%d more)\n", extra)
+		}
+	}
+
+	if len(c.curr.Dead) > 0 {
+		fmt.Fprintf(&b, "Closed:\n")
+		lines := formatConnIDs(c.curr.Dead, c.prevConns(), 10)
+		for _, ln := range lines {
+			fmt.Fprintf(&b, "- %s\n", ln)
+		}
+		if extra := len(c.curr.Dead) - len(lines); extra > 0 {
+			fmt.Fprintf(&b, "  ... (+%d more)\n", extra)
+		}
+	}
+
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
+func formatConnIDs(ids []ConnID, source map[ConnID]gnet.ConnectionStat, limit int) []string {
+	n := len(ids)
+	if limit > 0 && n > limit {
+		n = limit
+	}
+	list := make([]string, 0, n)
+
+	// Stable order: sort by string form of id
+	sorted := make([]string, 0, len(ids))
+	idMap := make(map[string]ConnID, len(ids))
+	for _, id := range ids {
+		key := connIDKey(id)
+		sorted = append(sorted, key)
+		idMap[key] = id
+	}
+	sort.Strings(sorted)
+	if limit > 0 && len(sorted) > limit {
+		sorted = sorted[:limit]
+	}
+
+	for _, key := range sorted {
+		id := idMap[key]
+		cs := source[id]
+		proto := connProtoFromType(id.Type)
+		fmtStr := "%s pid=%d %s:%d -> %s:%d status=%s"
+		list = append(list, fmt.Sprintf(fmtStr, proto, id.PID, id.LIP, id.LPort, id.RIP, id.RPort, cs.Status))
+	}
+	return list
+}
+
+func connIDKey(id ConnID) string {
+	return fmt.Sprintf("%d|%d|%d|%s|%s|%d|%s|%d", id.Family, id.Type, id.PID, id.Status, id.LIP, id.LPort, id.RIP, id.RPort)
+}
+
+func connProtoFromType(t uint32) ConnProto {
+	switch t {
+	case 1:
+		return ProtoTCP
+	case 2:
+		return ProtoUDP
+	default:
+		return ProtoUnknown
+	}
+}
+
+func (c *ConnCapturer) prevConns() map[ConnID]gnet.ConnectionStat {
+	if c.prev != nil {
+		return c.prev.Conns
+	}
+	return nil
 }

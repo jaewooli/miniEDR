@@ -3,6 +3,7 @@ package miniedr_test
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/jaewooli/miniedr"
@@ -84,5 +85,12 @@ func assertTrue(t testing.TB, got bool) {
 	t.Helper()
 	if !got {
 		t.Errorf("got %v", got)
+	}
+}
+
+func assertContains(t testing.TB, s, sub string) {
+	t.Helper()
+	if !strings.Contains(s, sub) {
+		t.Errorf("want substring %q in %q", sub, s)
 	}
 }

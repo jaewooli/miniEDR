@@ -56,3 +56,39 @@ func TestPersistCapturer(t *testing.T) {
 		assertError(t, err, "persist capturer: Sources is empty")
 	})
 }
+
+func TestPersistCapturerVerbose(t *testing.T) {
+	src := &stubPersistSource{
+		name: "stub",
+		snapshots: []map[string]string{
+			{"a": "1", "b": "2"},
+			{"a": "1", "c": "3"},
+		},
+	}
+
+	p := &miniedr.PersistCapturer{
+		Sources: []miniedr.PersistSource{src},
+	}
+
+	nowCalls := 0
+	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0)}
+	p.Now = func() time.Time {
+		if nowCalls >= len(nowSeq) {
+			return nowSeq[len(nowSeq)-1]
+		}
+		defer func() { nowCalls++ }()
+		return nowSeq[nowCalls]
+	}
+
+	assertError(t, p.Capture(), "")
+	assertError(t, p.Capture(), "")
+
+	got, err := p.GetVerboseInfo()
+	assertError(t, err, "")
+	want := "" +
+		"PersistSnapshot(at=1970-01-01T09:00:20+09:00)\n" +
+		"- stub entries=2 added=1 changed=0 removed=1\n" +
+		"  added: c\n" +
+		"  removed: b"
+	assertEqual(t, got, want)
+}

@@ -101,6 +101,51 @@ func (c *CPUCapturer) GetInfo() (string, error) {
 	), nil
 }
 
+// GetVerboseInfo returns per-core usage and times for detailed output.
+func (c *CPUCapturer) GetVerboseInfo() (string, error) {
+	if c.curr == nil {
+		return "CPUSnapshot(verbose-empty)", nil
+	}
+
+	var b strings.Builder
+
+	totalUsage := "n/a"
+	if c.prev != nil && len(c.prev.Total) == 1 && len(c.curr.Total) == 1 {
+		if u, ok := cpuUsagePct(c.prev.Total[0], c.curr.Total[0]); ok {
+			totalUsage = fmt.Sprintf("%.2f%%", u)
+		}
+	}
+	if len(c.curr.Total) == 1 {
+		t := c.curr.Total[0]
+		fmt.Fprintf(
+			&b,
+			"total usage=%s user=%.2fs system=%.2fs idle=%.2fs nice=%.2fs iowait=%.2fs irq=%.2fs softirq=%.2fs steal=%.2fs guest=%.2fs guestNice=%.2fs\n",
+			totalUsage,
+			t.User, t.System, t.Idle, t.Nice, t.Iowait,
+			t.Irq, t.Softirq, t.Steal, t.Guest, t.GuestNice,
+		)
+	}
+
+	per := c.curr.PerCore
+	for i, t := range per {
+		usage := "n/a"
+		if c.prev != nil && len(c.prev.PerCore) == len(per) {
+			if u, ok := cpuUsagePct(c.prev.PerCore[i], t); ok {
+				usage = fmt.Sprintf("%.2f%%", u)
+			}
+		}
+		fmt.Fprintf(
+			&b,
+			"cpu%d usage=%s user=%.2fs system=%.2fs idle=%.2fs nice=%.2fs iowait=%.2fs irq=%.2fs softirq=%.2fs steal=%.2fs guest=%.2fs guestNice=%.2fs\n",
+			i, usage,
+			t.User, t.System, t.Idle, t.Nice, t.Iowait,
+			t.Irq, t.Softirq, t.Steal, t.Guest, t.GuestNice,
+		)
+	}
+
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
 // cpuUsagePct: (total - idle) / total * 100 (TimesStat는 초 단위 누적)
 func cpuUsagePct(a, b cpu.TimesStat) (float64, bool) {
 	ta := totalCPUTime(a)

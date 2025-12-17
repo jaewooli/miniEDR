@@ -83,3 +83,22 @@ func (m *MEMCapturer) GetInfo() (string, error) {
 		s.Free, s.Sin, s.Sout,
 	), nil
 }
+
+// GetVerboseInfo returns a richer breakdown of RAM/swap fields.
+func (m *MEMCapturer) GetVerboseInfo() (string, error) {
+	if m.snapshot.Virtual == nil || m.snapshot.Swap == nil {
+		return "MEMSnapshot(verbose-empty)", nil
+	}
+
+	v := m.snapshot.Virtual
+	s := m.snapshot.Swap
+
+	return fmt.Sprintf(
+		"MEMSnapshot(at=%s)\nRAM: total=%dB avail=%dB used=%dB used%%=%.2f free=%dB active=%dB inactive=%dB wired=%dB buffers=%dB cached=%dB swapCached=%dB dirty=%dB writeback=%dB slab=%dB sreclaimable=%dB sunreclaim=%dB pageTables=%dB shared=%dB\nSwap: total=%dB used=%dB used%%=%.2f free=%dB sin=%dB sout=%dB pgIn=%d pgOut=%d pgFault=%d pgMajFault=%d",
+		m.snapshot.At.Format(time.RFC3339),
+		v.Total, v.Available, v.Used, v.UsedPercent, v.Free,
+		v.Active, v.Inactive, v.Wired, v.Buffers, v.Cached, v.SwapCached,
+		v.Dirty, v.WriteBack, v.Slab, v.Sreclaimable, v.Sunreclaim, v.PageTables, v.Shared,
+		s.Total, s.Used, s.UsedPercent, s.Free, s.Sin, s.Sout, s.PgIn, s.PgOut, s.PgFault, s.PgMajFault,
+	), nil
+}

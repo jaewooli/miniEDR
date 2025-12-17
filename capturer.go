@@ -12,6 +12,11 @@ type Info interface {
 	GetInfo() (string, error)
 }
 
+// VerboseInfo can be implemented by capturers that can emit additional detail.
+type VerboseInfo interface {
+	GetVerboseInfo() (string, error)
+}
+
 type Capturer interface {
 	Info
 	Capture() error

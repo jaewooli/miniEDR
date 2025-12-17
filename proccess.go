@@ -172,3 +172,65 @@ func (c *ProcCapturer) GetInfo() (string, error) {
 		exStr,
 	), nil
 }
+
+// GetVerboseInfo returns detailed lists of new/dead processes.
+func (c *ProcCapturer) GetVerboseInfo() (string, error) {
+	if c.curr == nil {
+		return "ProcSnapshot(verbose-empty)", nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "ProcSnapshot(at=%s, total=%d, new=%d, dead=%d)\n",
+		c.curr.At.Format(time.RFC3339),
+		len(c.curr.Procs),
+		len(c.curr.NewPIDs),
+		len(c.curr.DeadPIDs),
+	)
+
+	if len(c.curr.NewPIDs) > 0 {
+		fmt.Fprintf(&b, "New:\n")
+		news := append([]int32{}, c.curr.NewPIDs...)
+		sort.Slice(news, func(i, j int) bool { return news[i] < news[j] })
+		limit := min(15, len(news))
+		for i := 0; i < limit; i++ {
+			pid := news[i]
+			m := c.curr.Procs[pid]
+			fmt.Fprintf(&b, "- pid=%d ppid=%d name=%s exe=%s cmd=%s started=%s\n",
+				m.PID, m.PPID, m.Name, m.Exe, shorten(m.Cmdline, 120), m.CreateTime.Format(time.RFC3339))
+		}
+		if extra := len(news) - limit; extra > 0 {
+			fmt.Fprintf(&b, "  ... (+%d more)\n", extra)
+		}
+	}
+
+	if len(c.curr.DeadPIDs) > 0 {
+		fmt.Fprintf(&b, "Dead:\n")
+		dead := append([]int32{}, c.curr.DeadPIDs...)
+		sort.Slice(dead, func(i, j int) bool { return dead[i] < dead[j] })
+		limit := min(15, len(dead))
+		for i := 0; i < limit; i++ {
+			pid := dead[i]
+			var meta ProcMeta
+			if c.prev != nil {
+				meta = c.prev.Procs[pid]
+			}
+			fmt.Fprintf(&b, "- pid=%d name=%s exe=%s cmd=%s\n",
+				pid, meta.Name, meta.Exe, shorten(meta.Cmdline, 120))
+		}
+		if extra := len(dead) - limit; extra > 0 {
+			fmt.Fprintf(&b, "  ... (+%d more)\n", extra)
+		}
+	}
+
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
+func shorten(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	if max <= 3 {
+		return s[:max]
+	}
+	return s[:max-3] + "..."
+}

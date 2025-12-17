@@ -124,6 +124,46 @@ func (p *PersistCapturer) GetInfo() (string, error) {
 	), nil
 }
 
+// GetVerboseInfo returns per-source changes with sample keys.
+func (p *PersistCapturer) GetVerboseInfo() (string, error) {
+	if p.curr == nil {
+		return "PersistSnapshot(verbose-empty)", nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "PersistSnapshot(at=%s)\n", p.curr.At.Format(time.RFC3339))
+
+	names := make([]string, 0, len(p.curr.Sources))
+	for name := range p.curr.Sources {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		added := p.curr.Added[name]
+		changed := p.curr.Changed[name]
+		removed := p.curr.Removed[name]
+		fmt.Fprintf(&b, "- %s entries=%d added=%d changed=%d removed=%d\n",
+			name, len(p.curr.Sources[name]), len(added), len(changed), len(removed))
+
+		printKeys := func(label string, keys []string) {
+			if len(keys) == 0 {
+				return
+			}
+			limit := min(10, len(keys))
+			fmt.Fprintf(&b, "  %s: %s\n", label, strings.Join(keys[:limit], ", "))
+			if extra := len(keys) - limit; extra > 0 {
+				fmt.Fprintf(&b, "    ... (+%d more)\n", extra)
+			}
+		}
+		printKeys("added", added)
+		printKeys("changed", changed)
+		printKeys("removed", removed)
+	}
+
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
 func defaultPersistSources() []PersistSource {
 	return []PersistSource{
 		NewCrontabSource(),

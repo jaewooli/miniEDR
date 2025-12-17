@@ -3,6 +3,8 @@ package miniedr
 import (
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/disk"
@@ -120,4 +122,86 @@ func (d *DISKCapturer) GetInfo() (string, error) {
 		ioSummary,
 		len(d.curr.IO),
 	), nil
+}
+
+// GetVerboseInfo returns per-path usage and per-device IO deltas.
+func (d *DISKCapturer) GetVerboseInfo() (string, error) {
+	if d.curr == nil {
+		return "DISKSnapshot(verbose-empty)", nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "DISKSnapshot(at=%s)\n", d.curr.At.Format(time.RFC3339))
+
+	// Paths usage detail
+	if len(d.curr.Usage) > 0 {
+		fmt.Fprintf(&b, "Usage:\n")
+		paths := make([]string, 0, len(d.curr.Usage))
+		for p := range d.curr.Usage {
+			paths = append(paths, p)
+		}
+		sort.Strings(paths)
+		for _, p := range paths {
+			u := d.curr.Usage[p]
+			if u == nil {
+				continue
+			}
+			inodePart := ""
+			if u.InodesTotal > 0 {
+				inodePart = fmt.Sprintf(" inodes=%.2f%% (%d/%d)", u.InodesUsedPercent, u.InodesUsed, u.InodesTotal)
+			}
+			fmt.Fprintf(&b, "- %s fstype=%s used=%.2f%% (%d/%d)%s\n",
+				p, u.Fstype, u.UsedPercent, u.Used, u.Total, inodePart)
+		}
+	}
+
+	// IO counters detail (delta/sec when possible)
+	sec := 0.0
+	if d.prev != nil {
+		sec = d.curr.At.Sub(d.prev.At).Seconds()
+	}
+	if len(d.curr.IO) > 0 {
+		fmt.Fprintf(&b, "IO:\n")
+		devs := make([]string, 0, len(d.curr.IO))
+		for name := range d.curr.IO {
+			devs = append(devs, name)
+		}
+		sort.Strings(devs)
+		for _, name := range devs {
+			cur := d.curr.IO[name]
+			if sec <= 0 {
+				fmt.Fprintf(&b, "- %s readBytes=%d writeBytes=%d readIO=%d writeIO=%d\n",
+					name, cur.ReadBytes, cur.WriteBytes, cur.ReadCount, cur.WriteCount)
+				continue
+			}
+			prev, ok := d.prev.IO[name]
+			if !ok {
+				fmt.Fprintf(&b, "- %s (no-prev) readBytes=%d writeBytes=%d readIO=%d writeIO=%d\n",
+					name, cur.ReadBytes, cur.WriteBytes, cur.ReadCount, cur.WriteCount)
+				continue
+			}
+			rb := deltaUint64(prev.ReadBytes, cur.ReadBytes)
+			wb := deltaUint64(prev.WriteBytes, cur.WriteBytes)
+			ri := deltaUint64(prev.ReadCount, cur.ReadCount)
+			wi := deltaUint64(prev.WriteCount, cur.WriteCount)
+			fmt.Fprintf(&b, "- %s read=%.0fB/s write=%.0fB/s readIO=%.1f/s writeIO=%.1f/s\n",
+				name,
+				float64(rb)/sec, float64(wb)/sec,
+				float64(ri)/sec, float64(wi)/sec,
+			)
+		}
+	}
+
+	out := strings.TrimSuffix(b.String(), "\n")
+	if out == "" {
+		return "DISKSnapshot(verbose-empty)", nil
+	}
+	return out, nil
+}
+
+func deltaUint64(prev, cur uint64) uint64 {
+	if cur >= prev {
+		return cur - prev
+	}
+	return 0
 }

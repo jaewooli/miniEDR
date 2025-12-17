@@ -111,14 +111,28 @@ func (a *EDRAgent) captureOnce(c Capturer) error {
 		fmt.Fprintf(a.Out, "[%s] capture error: %v\n", typeName(c), err)
 		return err
 	}
+
 	info, err := c.GetInfo()
 	if err != nil {
 		fmt.Fprintf(a.Out, "[%s] getinfo error: %v\n", typeName(c), err)
 		return err
 	}
+
+	fmt.Fprintf(a.Out, "[%s] %s\n", typeName(c), info)
+
 	if a.Verbose {
+		verboseInfo := info
+		if vc, ok := c.(VerboseInfo); ok {
+			vi, err := vc.GetVerboseInfo()
+			if err != nil {
+				fmt.Fprintf(a.Out, "[%s] getverboseinfo error: %v\n", typeName(c), err)
+				return err
+			}
+			verboseInfo = vi
+		}
+
 		ts := time.Now().Format(time.RFC3339)
-		fmt.Fprintf(a.Out, "\n==== %s @ %s ====\n%s\n", typeName(c), ts, info)
+		fmt.Fprintf(a.Out, "\n==== %s (verbose) @ %s ====\n%s\n", typeName(c), ts, verboseInfo)
 	}
 	return nil
 }

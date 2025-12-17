@@ -110,3 +110,61 @@ func TestMemSnapShot(t *testing.T) {
 		assertError(t, err, "mem capturer: VirtualFn is nil")
 	})
 }
+
+func TestMemSnapshotVerbose(t *testing.T) {
+	memCapturer := &miniedr.MEMCapturer{}
+
+	nowSeq := []time.Time{time.Unix(10, 0)}
+	nowCalls := 0
+	memCapturer.Now = func() time.Time {
+		if nowCalls >= len(nowSeq) {
+			return nowSeq[len(nowSeq)-1]
+		}
+		defer func() { nowCalls++ }()
+		return nowSeq[nowCalls]
+	}
+
+	vm := &mem.VirtualMemoryStat{
+		Total:        1024,
+		Available:    256,
+		Used:         768,
+		UsedPercent:  75.0,
+		Free:         128,
+		Active:       10,
+		Inactive:     20,
+		Wired:        30,
+		Buffers:      40,
+		Cached:       50,
+		SwapCached:   60,
+		Dirty:        70,
+		WriteBack:    80,
+		Slab:         90,
+		Sreclaimable: 100,
+		Sunreclaim:   110,
+		PageTables:   120,
+		Shared:       130,
+	}
+	swap := &mem.SwapMemoryStat{
+		Total:       512,
+		Used:        128,
+		UsedPercent: 25.0,
+		Free:        384,
+		Sin:         1,
+		Sout:        2,
+		PgIn:        3,
+		PgOut:       4,
+		PgFault:     5,
+		PgMajFault:  6,
+	}
+	memCapturer.VirtualFn = func() (*mem.VirtualMemoryStat, error) { return vm, nil }
+	memCapturer.SwapFn = func() (*mem.SwapMemoryStat, error) { return swap, nil }
+
+	assertError(t, memCapturer.Capture(), "")
+
+	got, err := memCapturer.GetVerboseInfo()
+	assertError(t, err, "")
+	want := "MEMSnapshot(at=1970-01-01T09:00:10+09:00)\n" +
+		"RAM: total=1024B avail=256B used=768B used%=75.00 free=128B active=10B inactive=20B wired=30B buffers=40B cached=50B swapCached=60B dirty=70B writeback=80B slab=90B sreclaimable=100B sunreclaim=110B pageTables=120B shared=130B\n" +
+		"Swap: total=512B used=128B used%=25.00 free=384B sin=1B sout=2B pgIn=3 pgOut=4 pgFault=5 pgMajFault=6"
+	assertEqual(t, got, want)
+}
