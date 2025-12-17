@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -30,6 +32,7 @@ type DashboardServer struct {
 	hasSnapshot bool
 	clients     map[chan string]struct{}
 	lastPayload map[string]string
+	logs        map[string][]dashboardLogEntry
 }
 
 type dashboardItem struct {
@@ -38,6 +41,23 @@ type dashboardItem struct {
 	Verbose string
 	Error   string
 	Changed bool
+	Logs    []dashboardLogEntry
+	Graph   graphInfo
+}
+
+type dashboardLogEntry struct {
+	At      string
+	Info    string
+	Verbose string
+	Error   string
+	Changed bool
+}
+
+type graphInfo struct {
+	Label     string
+	Value     float64
+	Display   float64
+	ValueText string
 }
 
 type dashboardData struct {
@@ -52,7 +72,8 @@ type dashboardData struct {
 
 func NewDashboardServer(capturers Capturers, title string, verbose bool) *DashboardServer {
 	t := template.Must(template.New("dashboard").Funcs(template.FuncMap{
-		"divMS": divMS,
+		"divMS":  divMS,
+		"chartX": chartX,
 	}).Parse(dashboardHTML))
 	if title == "" {
 		title = "miniEDR Dashboard"
@@ -68,6 +89,7 @@ func NewDashboardServer(capturers Capturers, title string, verbose bool) *Dashbo
 		captureInterval: 5 * time.Second,
 		clients:         make(map[chan string]struct{}),
 		lastPayload:     make(map[string]string),
+		logs:            make(map[string][]dashboardLogEntry),
 	}
 }
 
@@ -168,6 +190,7 @@ func (d *DashboardServer) captureAndStore() {
 	d.mu.RUnlock()
 
 	items := make([]dashboardItem, 0, len(d.Capturers))
+	changedAny := false
 	for _, c := range d.Capturers {
 		name := typeName(c)
 
@@ -195,17 +218,22 @@ func (d *DashboardServer) captureAndStore() {
 			}
 		}
 
+		if gi := deriveGraph(name, item.Info); gi.Label != "" {
+			item.Graph = gi
+		}
+
 		// change detection: compare serialized payload excluding timestamps
 		payload := normalizePayload(item.Info) + "|" + normalizePayload(item.Verbose) + "|" + normalizePayload(item.Error)
 		d.mu.RLock()
 		prev := d.lastPayload[name]
 		d.mu.RUnlock()
-		if prev != "" && prev != payload {
+		changed := prev != "" && prev != payload
+		if changed {
 			item.Changed = true
+			changedAny = true
+		} else if prev == "" {
+			changedAny = true
 		}
-		d.mu.Lock()
-		d.lastPayload[name] = payload
-		d.mu.Unlock()
 
 		items = append(items, item)
 	}
@@ -213,6 +241,30 @@ func (d *DashboardServer) captureAndStore() {
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
 
 	ref := nowFn().Format(time.RFC3339)
+
+	for i := range items {
+		name := items[i].Name
+		logs := append([]dashboardLogEntry{}, d.logs[name]...)
+		entry := dashboardLogEntry{
+			At:      ref,
+			Info:    items[i].Info,
+			Verbose: items[i].Verbose,
+			Error:   items[i].Error,
+			Changed: items[i].Changed,
+		}
+		if items[i].Changed || len(logs) == 0 {
+			logs = append(logs, entry)
+			if len(logs) > 20 {
+				logs = logs[len(logs)-20:]
+			}
+		}
+		items[i].Logs = logs
+
+		d.mu.Lock()
+		d.lastPayload[name] = normalizePayload(items[i].Info) + "|" + normalizePayload(items[i].Verbose) + "|" + normalizePayload(items[i].Error)
+		d.logs[name] = logs
+		d.mu.Unlock()
+	}
 
 	d.mu.Lock()
 	d.snapshot = dashboardData{
@@ -227,7 +279,9 @@ func (d *DashboardServer) captureAndStore() {
 	d.hasSnapshot = true
 	d.mu.Unlock()
 
-	d.broadcast(ref)
+	if changedAny {
+		d.broadcast(ref)
+	}
 }
 
 func (d *DashboardServer) currentSnapshot() dashboardData {
@@ -439,6 +493,76 @@ button:hover {
   color: #fca5a5;
   font-weight: 600;
 }
+.chart {
+  margin-top: 6px;
+}
+ .gauge {
+  width: 120px;
+  height: 120px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.gauge-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    #22d3ee calc(var(--val) * 1%),
+    rgba(148,163,184,0.2) calc(var(--val) * 1%),
+    rgba(148,163,184,0.2) 100%
+  );
+}
+.gauge-center {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: #0b1220;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #e5e7eb;
+  box-shadow: inset 0 0 0 1px rgba(148,163,184,0.3);
+  font-weight: 700;
+}
+.gauge-label {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+svg.timeline line {
+  stroke: rgba(148, 163, 184, 0.6);
+  stroke-width: 2;
+}
+svg.timeline circle {
+  fill: #22d3ee;
+  stroke: #0b1220;
+  stroke-width: 1.5;
+}
+svg.timeline circle.changed {
+  fill: #22c55e;
+}
+svg.timeline circle.error {
+  fill: #f87171;
+}
+details summary {
+  cursor: pointer;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+details {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+details pre {
+  margin-top: 6px;
+}
 pre {
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -500,6 +624,15 @@ small {
           {{if .Error}}
             <div class="error">{{.Error}}</div>
           {{else}}
+            {{if .Graph.Label}}
+            <div class="gauge" style="--val: {{printf "%.1f" .Graph.Display}}">
+              <div class="gauge-ring"></div>
+              <div class="gauge-center">
+                <div>{{if .Graph.ValueText}}{{.Graph.ValueText}}{{else}}{{printf "%.1f%%" .Graph.Value}}{{end}}</div>
+                <div class="gauge-label">{{.Graph.Label}}</div>
+              </div>
+            </div>
+            {{end}}
             <div>
               <small>info</small>
               <pre>{{.Info}}</pre>
@@ -509,6 +642,34 @@ small {
               <small>verbose</small>
               <pre>{{.Verbose}}</pre>
             </div>
+            {{end}}
+            {{if .Logs}}
+            {{ $item := . }}
+            <div class="chart">
+              <svg class="timeline" width="220" height="34">
+                <line x1="10" y1="17" x2="210" y2="17"></line>
+                {{ $total := len .Logs }}
+                {{range $i, $log := .Logs}}
+                  {{ $cls := "" }}
+                  {{if $log.Changed}}{{$cls = (printf "%s %s" $cls "changed")}}{{end}}
+                  {{if $log.Error}}{{$cls = (printf "%s %s" $cls "error")}}{{end}}
+                  <circle cx="{{chartX $i $total}}" cy="17" r="5" class="{{$cls}}">
+                    <title>{{$log.At}}</title>
+                  </circle>
+                {{end}}
+              </svg>
+            </div>
+            <details>
+              <summary>Detail log (latest {{len .Logs}})</summary>
+              {{range .Logs}}
+              <div class="hint">{{.At}}</div>
+              {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+              {{if .Info}}<pre>{{.Info}}</pre>{{end}}
+              {{if .Verbose}}<pre>{{.Verbose}}</pre>{{end}}
+              {{end}}
+            </details>
+            {{end}}
+            {{if .Logs}}
             {{end}}
           {{end}}
         </div>
@@ -522,11 +683,27 @@ small {
     const autoBox = document.getElementById('autoRefresh');
     const eventBox = document.getElementById('eventRefresh');
     const input = document.getElementById('refreshInterval');
+    const metaEl = document.querySelector('.meta');
+    const gridEl = document.querySelector('.grid');
     const storageKeyAuto = 'miniedr:auto';
     const storageKeyAutoInterval = 'miniedr:autoInterval';
     const storageKeyEvent = 'miniedr:event';
     let timer = null;
     let es = null;
+
+	async function refreshView() {
+	  try {
+		const res = await fetch(window.location.href, {cache: 'no-store'});
+		const html = await res.text();
+		const doc = new DOMParser().parseFromString(html, 'text/html');
+		const newMeta = doc.querySelector('.meta');
+		const newGrid = doc.querySelector('.grid');
+		if (newMeta && metaEl) metaEl.innerHTML = newMeta.innerHTML;
+		if (newGrid && gridEl) gridEl.innerHTML = newGrid.innerHTML;
+	  } catch (e) {
+		console.error('refresh failed', e);
+	  }
+	}
 
     function applyAuto() {
       clearInterval(timer);
@@ -539,7 +716,7 @@ small {
       localStorage.setItem(storageKeyAutoInterval, sec.toString());
 
       if (enabled) {
-        timer = setInterval(() => location.reload(), sec * 1000);
+        timer = setInterval(refreshView, sec * 1000);
       }
     }
 
@@ -556,7 +733,7 @@ small {
       stopEventStream();
       if (enabled) {
         es = new EventSource('/events');
-        es.onmessage = () => location.reload();
+        es.onmessage = refreshView;
         es.onerror = () => stopEventStream();
       }
     }
@@ -578,6 +755,7 @@ small {
     autoBox.addEventListener('change', applyAuto);
     eventBox.addEventListener('change', applyEvent);
     input.addEventListener('change', applyAuto);
+    document.getElementById('refreshBtn').onclick = refreshView;
 
     applyAuto();
     applyEvent();
@@ -599,4 +777,110 @@ var tsRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z
 func normalizePayload(s string) string {
 	out := tsRe.ReplaceAllString(s, "<ts>")
 	return out
+}
+
+func chartX(idx, total int) int {
+	if total <= 1 {
+		return 10
+	}
+	span := 200
+	step := span / (total - 1)
+	return 10 + idx*step
+}
+
+func deriveGraph(name, info string) graphInfo {
+	switch {
+	case strings.Contains(name, "MEM"):
+		if pct, ok := extractPercent(info, `UsedApprox=[^()]*\(([\d\.]+)%\)`); ok {
+			return graphInfo{Label: "RAM used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
+		}
+	case strings.Contains(name, "CPU"):
+		if pct, ok := extractPercent(info, `totalUsage=([\d\.]+)%`); ok {
+			return graphInfo{Label: "CPU total", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
+		}
+		if pct, ok := extractPercent(info, `instant=([\d\.]+)%`); ok {
+			return graphInfo{Label: "CPU instant", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
+		}
+	case strings.Contains(name, "DISK"):
+		if pct, ok := extractPercent(info, `used=([\d\.]+)%`); ok {
+			return graphInfo{Label: "DISK used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)}
+		}
+	case strings.Contains(name, "NET"):
+		if rx, tx, ok := extractRates(info); ok {
+			total := rx + tx
+			// scale vs 10MB/s budget (closer to Task Manager small-host view)
+			pct := (total / (10 * 1024 * 1024)) * 100
+			if pct > 100 {
+				pct = 100
+			}
+			pct = clampGraphValue(pct)
+			label := fmt.Sprintf("NET %s/s", humanBytes(total))
+			return graphInfo{Label: label, Value: pct, Display: pct, ValueText: label}
+		}
+	}
+	return graphInfo{}
+}
+
+func extractPercent(s, pattern string) (float64, bool) {
+	re := regexp.MustCompile(pattern)
+	m := re.FindStringSubmatch(s)
+	if len(m) != 2 {
+		return 0, false
+	}
+	v, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		return 0, false
+	}
+	if v < 0 {
+		v = 0
+	}
+	if v > 100 {
+		v = 100
+	}
+	return v, true
+}
+
+func clampGraphValue(v float64) float64 {
+	if v < 0 {
+		v = 0
+	}
+	if v > 100 {
+		v = 100
+	}
+	if v > 0 && v < 1 {
+		return 1 // ensure visibility for tiny non-zero values
+	}
+	return v
+}
+
+func extractRates(info string) (float64, float64, bool) {
+	re := regexp.MustCompile(`rxRate=(\d+)B/s, txRate=(\d+)B/s`)
+	m := re.FindStringSubmatch(info)
+	if len(m) != 3 {
+		return 0, 0, false
+	}
+	rx, err1 := strconv.ParseFloat(m[1], 64)
+	tx, err2 := strconv.ParseFloat(m[2], 64)
+	if err1 != nil || err2 != nil {
+		return 0, 0, false
+	}
+	return rx, tx, true
+}
+
+func humanBytes(v float64) string {
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+	)
+	switch {
+	case v >= gb:
+		return fmt.Sprintf("%.1fGB", v/gb)
+	case v >= mb:
+		return fmt.Sprintf("%.1fMB", v/mb)
+	case v >= kb:
+		return fmt.Sprintf("%.1fKB", v/kb)
+	default:
+		return fmt.Sprintf("%.0fB", v)
+	}
 }

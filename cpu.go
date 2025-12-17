@@ -19,17 +19,21 @@ type CPUSnapshot struct {
 }
 
 type CPUCapturer struct {
-	Now     func() time.Time
-	TimesFn func(percpu bool) ([]cpu.TimesStat, error)
+	Now       func() time.Time
+	TimesFn   func(percpu bool) ([]cpu.TimesStat, error)
+	PercentFn func(interval time.Duration, percpu bool) ([]float64, error)
 
 	prev *CPUSnapshot
 	curr *CPUSnapshot
+
+	instantPct float64
 }
 
 func NewCPUCapturer() *CPUCapturer {
 	return &CPUCapturer{
-		Now:     time.Now,
-		TimesFn: cpu.Times,
+		Now:       time.Now,
+		TimesFn:   cpu.Times,
+		PercentFn: cpu.Percent,
 	}
 }
 
@@ -50,6 +54,14 @@ func (c *CPUCapturer) Capture() error {
 		return fmt.Errorf("cpu.Times(percpu=false): %w", err)
 	}
 
+	// instant usage via cpu.Percent with a short interval
+	instPct := 0.0
+	if c.PercentFn != nil {
+		if pcts, err := c.PercentFn(150*time.Millisecond, false); err == nil && len(pcts) > 0 {
+			instPct = pcts[0]
+		}
+	}
+
 	snap := &CPUSnapshot{
 		At:      c.Now(),
 		PerCore: per,
@@ -58,6 +70,7 @@ func (c *CPUCapturer) Capture() error {
 
 	c.prev = c.curr
 	c.curr = snap
+	c.instantPct = instPct
 	return nil
 }
 
@@ -94,10 +107,11 @@ func (c *CPUCapturer) GetInfo() (string, error) {
 	}
 
 	return fmt.Sprintf(
-		"CPUSnapshot(at=%s, totalUsage=%s%s)",
+		"CPUSnapshot(at=%s, totalUsage=%s%s, instant=%.2f%%)",
 		c.curr.At.Format(time.RFC3339),
 		totalUsage,
 		coreInfo,
+		c.instantPct,
 	), nil
 }
 
@@ -144,6 +158,11 @@ func (c *CPUCapturer) GetVerboseInfo() (string, error) {
 	}
 
 	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
+// InstantPct returns the latest instantaneous percent if captured.
+func (c *CPUCapturer) InstantPct() float64 {
+	return c.instantPct
 }
 
 // cpuUsagePct: (total - idle) / total * 100 (TimesStat는 초 단위 누적)

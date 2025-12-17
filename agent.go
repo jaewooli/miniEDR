@@ -159,7 +159,9 @@ func DefaultSchedules(cs []Capturer) []CapturerSchedule {
 
 func defaultIntervalFor(c Capturer) time.Duration {
 	switch c.(type) {
-	case *CPUCapturer, *NETCapturer, *ConnCapturer:
+	case *CPUCapturer:
+		return 2 * time.Second
+	case *NETCapturer, *ConnCapturer:
 		return 5 * time.Second
 	case *ProcCapturer, *MEMCapturer:
 		return 10 * time.Second

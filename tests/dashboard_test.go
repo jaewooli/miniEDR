@@ -58,8 +58,8 @@ func (d *dashStub) GetVerboseInfo() (string, error) {
 
 func TestDashboardSnapshotAndRender(t *testing.T) {
 	cs := miniedr.Capturers{
-		&dashStub{name: "cpu", info: "cpu info", verbose: "cpu verbose"},
-		&dashStub{name: "mem", info: "mem info", verbose: "mem verbose"},
+		&dashStub{name: "CPUCapturer", info: "CPUSnapshot(at=..., totalUsage=1.1%)", verbose: "cpu verbose"},
+		&dashStub{name: "MEMCapturer", info: "MEMSnapshot(at=..., RAM: Total=0B Avail=0B UsedApprox=0B (0.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)", verbose: "mem verbose"},
 	}
 	ds := miniedr.NewDashboardServer(cs, "TestDash", true)
 
@@ -75,10 +75,11 @@ func TestDashboardSnapshotAndRender(t *testing.T) {
 	body := readBody(t, res)
 
 	assertContains(t, body, "TestDash")
-	assertContains(t, body, "cpu info")
+	assertContains(t, body, "CPUSnapshot")
 	assertContains(t, body, "cpu verbose")
-	assertContains(t, body, "mem info")
+	assertContains(t, body, "MEMSnapshot")
 	assertContains(t, body, "mem verbose")
+	assertContains(t, body, "gauge")
 	assertContains(t, body, now.Format("2006-01-02T15:04:05"))
 }
 
