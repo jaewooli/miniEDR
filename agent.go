@@ -164,13 +164,13 @@ func defaultIntervalFor(c Capturer) time.Duration {
 	case *NETCapturer, *ConnCapturer:
 		return 5 * time.Second
 	case *ProcCapturer, *MEMCapturer:
-		return 10 * time.Second
+		return 5 * time.Second
 	case *FileWatchCapturer:
 		return 15 * time.Second
 	case *DISKCapturer:
 		return 30 * time.Second
 	case *PersistCapturer:
-		return time.Minute
+		return 10 * time.Minute
 	default:
 		return 5 * time.Second
 	}
