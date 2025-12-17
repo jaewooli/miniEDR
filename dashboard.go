@@ -537,8 +537,9 @@ button:hover {
 .grid {
   margin-top: 24px;
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  align-items: stretch;
 }
 .card {
   background: linear-gradient(135deg, rgba(148, 163, 184, 0.08), rgba(100, 116, 139, 0.05));
@@ -550,6 +551,8 @@ button:hover {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  height: 100%;
+  box-sizing: border-box;
 }
 .card h2 {
   margin: 0;
@@ -625,6 +628,44 @@ button:hover {
 }
 .gauge-label.gauge-label-small {
   font-size: 12px;
+}
+.gauge-grid {
+  display: grid;
+  justify-content: center;
+  justify-items: center;
+  gap: 12px;
+}
+.gauge-grid-1 {
+  grid-template-columns: 1fr;
+}
+.gauge-grid-2col {
+  grid-template-columns: 1fr;
+}
+.gauge-grid-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+}
+.gauge-lg {
+  width: 230px;
+  height: 230px;
+}
+.gauge-lg .gauge-center {
+  width: 150px;
+  height: 150px;
+}
+.gauge-md {
+  width: 180px;
+  height: 180px;
+}
+.gauge-md .gauge-center {
+  width: 120px;
+  height: 120px;
+}
+.gauge {
+  justify-self: center;
 }
 svg.timeline line {
   stroke: rgba(148, 163, 184, 0.6);
@@ -729,17 +770,44 @@ small {
             <div class="error">{{.Error}}</div>
           {{else}}
             {{if .Graphs}}
-            <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
-              {{range .Graphs}}
-              <div class="gauge" style="--val: {{printf "%.1f" .Display}}">
-                <div class="gauge-ring"></div>
-                <div class="gauge-center">
-                  <div>{{if .ValueText}}{{.ValueText}}{{else}}{{printf "%.1f%%" .Value}}{{end}}</div>
-                  <div class="gauge-label {{if hasNL .Label}}gauge-label-small{{end}}">{{.Label}}</div>
+            {{/* Choose layout based on graph count: 1 -> enlarged; 2 -> column; else -> row wrap */}}
+            {{if eq (len .Graphs) 1}}
+              <div class="gauge-grid gauge-grid-1">
+                {{range .Graphs}}
+                <div class="gauge gauge-lg" style="--val: {{printf "%.1f" .Display}}">
+                  <div class="gauge-ring"></div>
+                  <div class="gauge-center">
+                    <div>{{if .ValueText}}{{.ValueText}}{{else}}{{printf "%.1f%%" .Value}}{{end}}</div>
+                    <div class="gauge-label {{if hasNL .Label}}gauge-label-small{{end}}">{{.Label}}</div>
+                  </div>
                 </div>
+                {{end}}
               </div>
-              {{end}}
-            </div>
+            {{else if eq (len .Graphs) 2}}
+              <div class="gauge-grid gauge-grid-2col">
+                {{range .Graphs}}
+                <div class="gauge gauge-md" style="--val: {{printf "%.1f" .Display}}">
+                  <div class="gauge-ring"></div>
+                  <div class="gauge-center">
+                    <div>{{if .ValueText}}{{.ValueText}}{{else}}{{printf "%.1f%%" .Value}}{{end}}</div>
+                    <div class="gauge-label {{if hasNL .Label}}gauge-label-small{{end}}">{{.Label}}</div>
+                  </div>
+                </div>
+                {{end}}
+              </div>
+            {{else}}
+              <div class="gauge-grid gauge-grid-row">
+                {{range .Graphs}}
+                <div class="gauge" style="--val: {{printf "%.1f" .Display}}">
+                  <div class="gauge-ring"></div>
+                  <div class="gauge-center">
+                    <div>{{if .ValueText}}{{.ValueText}}{{else}}{{printf "%.1f%%" .Value}}{{end}}</div>
+                    <div class="gauge-label {{if hasNL .Label}}gauge-label-small{{end}}">{{.Label}}</div>
+                  </div>
+                </div>
+                {{end}}
+              </div>
+            {{end}}
             {{end}}
             <div>
               <small>summary</small>
