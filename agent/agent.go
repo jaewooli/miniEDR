@@ -39,6 +39,8 @@ type CollectAgent struct {
 	sinkStats  map[string]*sinkStat
 	pipelineCh chan queueItem
 	pipelineWG sync.WaitGroup
+	queueSize  int
+	queueDrops int
 }
 
 func NewCollectAgent(schedules []CapturerSchedule) *CollectAgent {
@@ -52,6 +54,7 @@ func NewCollectAgent(schedules []CapturerSchedule) *CollectAgent {
 		timezone:        tz,
 		sessionID:       newSessionID(),
 		sinkStats:       map[string]*sinkStat{},
+		queueSize:       64,
 	}
 }
 
@@ -79,7 +82,10 @@ func (a *CollectAgent) Run(ctx context.Context) error {
 	defer cancel()
 
 	if a.pipelineCh == nil {
-		a.pipelineCh = make(chan queueItem, 64)
+		if a.queueSize <= 0 {
+			a.queueSize = 64
+		}
+		a.pipelineCh = make(chan queueItem, a.queueSize)
 	}
 	a.pipelineWG.Add(1)
 	go func() {
@@ -183,7 +189,7 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer, interval time.Duration) 
 		default:
 			// queue full, process synchronously to avoid loss
 			fmt.Fprintf(a.Out, "[%s] pipeline queue full; processing inline\n", name)
-			a.recordErr(fmt.Errorf("pipeline queue full"))
+			a.incrementDrop()
 			a.processInfo(name, info)
 		}
 	} else {
@@ -332,4 +338,22 @@ func (a *CollectAgent) pipelineLoop(ctx context.Context) {
 type queueItem struct {
 	name string
 	info capturer.InfoData
+}
+
+func (a *CollectAgent) incrementDrop() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.queueDrops++
+}
+
+// QueueStats returns current queue size, capacity, and drops.
+func (a *CollectAgent) QueueStats() (pending int, capacity int, drops int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	capacity = cap(a.pipelineCh)
+	if a.pipelineCh != nil {
+		pending = len(a.pipelineCh)
+	}
+	drops = a.queueDrops
+	return
 }
