@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 )
 
 func TestDeriveGraphVariants(t *testing.T) {
@@ -13,15 +13,15 @@ func TestDeriveGraphVariants(t *testing.T) {
 		graphs []graphInfo
 		expect func([]graphInfo) bool
 	}{
-		{"cpu total", deriveGraphs("CPUCapturer", miniedr.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=1.1%, cpu0=0.5%)"}), func(g []graphInfo) bool { return len(g) == 1 && g[0].Label == "CPU avg" && g[0].Value == 1.1 }},
-		{"mem zero", deriveGraphs("MEMCapturer", miniedr.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=0B Avail=0B UsedApprox=0B (0.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}), func(g []graphInfo) bool { return len(g) >= 1 && g[0].Label == "RAM used" && g[0].Value == 0 }},
-		{"mem nonzero", deriveGraphs("MEMCapturer", miniedr.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=100B Avail=10B UsedApprox=90B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}), func(g []graphInfo) bool { return len(g) >= 1 && g[0].Label == "RAM used" && g[0].Value > 26 }},
-		{"mem with swap", deriveGraphs("MEMCapturer", miniedr.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=100B Avail=10B UsedApprox=90B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=10B Used=5B (50.00%) Free=0B, Sin=0B Sout=0B)"}), func(g []graphInfo) bool { return len(g) == 2 && g[1].Label == "Swap used" && g[1].Value == 50 }},
-		{"disk used", deriveGraphs("DISKCapturer", miniedr.InfoData{Summary: "DISKSnapshot(at=..., / used=50.00% (500/1000B), ioRate=read 0B/s write 0B/s, devices=1)"}), func(g []graphInfo) bool { return len(g) == 1 && g[0].Label == "DISK used" && g[0].Value == 50 }},
-		{"disk zero", deriveGraphs("DISKCapturer", miniedr.InfoData{Summary: "DISKSnapshot(at=..., / used=0.00% (0/1000B), ioRate=read 0B/s write 0B/s, devices=1)"}), func(g []graphInfo) bool { return len(g) == 1 && g[0].Value == 0 }},
-		{"net rate", deriveGraphs("NETCapturer", miniedr.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=1048576B/s, txRate=1048576B/s)"}), func(g []graphInfo) bool { return len(g) == 1 && strings.HasPrefix(g[0].Label, "NET") && g[0].Value > 0 }},
-		{"net zero", deriveGraphs("NETCapturer", miniedr.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=0B/s, txRate=0B/s)"}), func(g []graphInfo) bool { return len(g) == 1 && strings.HasPrefix(g[0].Label, "NET") }},
-		{"unknown capturer", deriveGraphs("FooCapturer", miniedr.InfoData{Summary: "random text"}), func(g []graphInfo) bool { return len(g) == 0 }},
+		{"cpu total", deriveGraphs("CPUCapturer", capturer.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=1.1%, cpu0=0.5%)"}), func(g []graphInfo) bool { return len(g) == 1 && g[0].Label == "CPU avg" && g[0].Value == 1.1 }},
+		{"mem zero", deriveGraphs("MEMCapturer", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=0B Avail=0B UsedApprox=0B (0.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}), func(g []graphInfo) bool { return len(g) >= 1 && g[0].Label == "RAM used" && g[0].Value == 0 }},
+		{"mem nonzero", deriveGraphs("MEMCapturer", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=100B Avail=10B UsedApprox=90B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}), func(g []graphInfo) bool { return len(g) >= 1 && g[0].Label == "RAM used" && g[0].Value > 26 }},
+		{"mem with swap", deriveGraphs("MEMCapturer", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=100B Avail=10B UsedApprox=90B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=10B Used=5B (50.00%) Free=0B, Sin=0B Sout=0B)"}), func(g []graphInfo) bool { return len(g) == 2 && g[1].Label == "Swap used" && g[1].Value == 50 }},
+		{"disk used", deriveGraphs("DISKCapturer", capturer.InfoData{Summary: "DISKSnapshot(at=..., / used=50.00% (500/1000B), ioRate=read 0B/s write 0B/s, devices=1)"}), func(g []graphInfo) bool { return len(g) == 1 && g[0].Label == "DISK used" && g[0].Value == 50 }},
+		{"disk zero", deriveGraphs("DISKCapturer", capturer.InfoData{Summary: "DISKSnapshot(at=..., / used=0.00% (0/1000B), ioRate=read 0B/s write 0B/s, devices=1)"}), func(g []graphInfo) bool { return len(g) == 1 && g[0].Value == 0 }},
+		{"net rate", deriveGraphs("NETCapturer", capturer.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=1048576B/s, txRate=1048576B/s)"}), func(g []graphInfo) bool { return len(g) == 1 && strings.HasPrefix(g[0].Label, "NET") && g[0].Value > 0 }},
+		{"net zero", deriveGraphs("NETCapturer", capturer.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=0B/s, txRate=0B/s)"}), func(g []graphInfo) bool { return len(g) == 1 && strings.HasPrefix(g[0].Label, "NET") }},
+		{"unknown capturer", deriveGraphs("FooCapturer", capturer.InfoData{Summary: "random text"}), func(g []graphInfo) bool { return len(g) == 0 }},
 	}
 
 	for _, tt := range cases {
@@ -58,18 +58,18 @@ func TestClampGraphValue(t *testing.T) {
 func TestSummariesTable(t *testing.T) {
 	tests := []struct {
 		name string
-		in   miniedr.InfoData
+		in   capturer.InfoData
 		want []string
 	}{
-		{"cpu full", miniedr.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=10.00%, cpu0=5.0% cpu1=15.0%)"}, []string{"Avg 10.00%"}},
-		{"cpu avg only", miniedr.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=5.00%, cpu0=2.0%)"}, []string{"Avg 5.00%"}},
-		{"mem percent total", miniedr.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=1024B Avail=512B UsedApprox=512B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}, []string{"RAM 26.49%", "Total 1.0KB"}},
-		{"mem swap", miniedr.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=2048B Avail=1024B UsedApprox=1024B (50.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=1024B Used=256B (25.00%) Free=0B, Sin=0B Sout=0B)"}, []string{"RAM 50.00%", "Swap 256B (25.00%)"}},
-		{"disk io", miniedr.InfoData{Summary: "DISKSnapshot(at=..., / used=75.00% (750/1000B), ioRate=read 10B/s write 20B/s, devices=1)"}, []string{"Used 75.00%", "read 10B/s write 20B/s"}},
-		{"disk zero", miniedr.InfoData{Summary: "DISKSnapshot(at=..., / used=0.00% (0/1000B), ioRate=n/a, devices=1)"}, []string{"Used 0.00%"}},
-		{"net both", miniedr.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=1024B/s, txRate=2048B/s)"}, []string{"RX 1024B/s", "TX 2048B/s"}},
-		{"net rx only", miniedr.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=512B/s, txRate=n/a)"}, []string{"RX 512B/s"}},
-		{"unknown", miniedr.InfoData{Summary: "plain text here"}, []string{"plain text here"}},
+		{"cpu full", capturer.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=10.00%, cpu0=5.0% cpu1=15.0%)"}, []string{"Avg 10.00%"}},
+		{"cpu avg only", capturer.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=5.00%, cpu0=2.0%)"}, []string{"Avg 5.00%"}},
+		{"mem percent total", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=1024B Avail=512B UsedApprox=512B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}, []string{"RAM 26.49%", "Total 1.0KB"}},
+		{"mem swap", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=2048B Avail=1024B UsedApprox=1024B (50.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=1024B Used=256B (25.00%) Free=0B, Sin=0B Sout=0B)"}, []string{"RAM 50.00%", "Swap 256B (25.00%)"}},
+		{"disk io", capturer.InfoData{Summary: "DISKSnapshot(at=..., / used=75.00% (750/1000B), ioRate=read 10B/s write 20B/s, devices=1)"}, []string{"Used 75.00%", "read 10B/s write 20B/s"}},
+		{"disk zero", capturer.InfoData{Summary: "DISKSnapshot(at=..., / used=0.00% (0/1000B), ioRate=n/a, devices=1)"}, []string{"Used 0.00%"}},
+		{"net both", capturer.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=1024B/s, txRate=2048B/s)"}, []string{"RX 1024B/s", "TX 2048B/s"}},
+		{"net rx only", capturer.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=512B/s, txRate=n/a)"}, []string{"RX 512B/s"}},
+		{"unknown", capturer.InfoData{Summary: "plain text here"}, []string{"plain text here"}},
 	}
 
 	for _, tt := range tests {

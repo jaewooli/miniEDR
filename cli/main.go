@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/agent"
 	"github.com/jaewooli/miniedr/capturer"
 	dash "github.com/jaewooli/miniedr/dashboard"
 )
@@ -60,7 +61,7 @@ func main() {
 	}
 
 	schedules := miniedr.DefaultSchedules(capturers)
-	edrAgent := miniedr.NewEDRAgent(schedules)
+	edrAgent := agent.NewCollectAgent(schedules)
 	edrAgent.Out = os.Stdout
 	edrAgent.Verbose = *verbose
 

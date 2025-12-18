@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jaewooli/miniedr"
 	"github.com/jaewooli/miniedr/capturer"
 )
 
@@ -43,7 +42,7 @@ type DashboardServer struct {
 
 type dashboardItem struct {
 	Name    string
-	Info    miniedr.InfoData
+	Info    capturer.InfoData
 	Verbose string
 	Error   string
 	Changed bool
@@ -212,7 +211,7 @@ func (d *DashboardServer) captureAndStore() {
 	}
 }
 
-func (d *DashboardServer) captureSingle(c miniedr.Capturer, ref, title string, verbose bool, autoRefresh bool, refreshSecs int, eventRefresh bool, capInterval time.Duration) {
+func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, verbose bool, autoRefresh bool, refreshSecs int, eventRefresh bool, capInterval time.Duration) {
 	name := capturer.CapturerName(c)
 
 	item := dashboardItem{Name: name}
@@ -226,7 +225,7 @@ func (d *DashboardServer) captureSingle(c miniedr.Capturer, ref, title string, v
 		} else {
 			item.Info = info
 			if verbose {
-				if vc, ok := c.(miniedr.VerboseInfo); ok {
+				if vc, ok := c.(capturer.VerboseInfo); ok {
 					verb, err := vc.GetVerboseInfo()
 					if err != nil {
 						item.Error = fmt.Sprintf("getverboseinfo error: %v", err)
@@ -333,7 +332,7 @@ func (d *DashboardServer) captureLoop(ctx context.Context) {
 		var wg sync.WaitGroup
 		for _, c := range capturers {
 			wg.Add(1)
-			go func(c miniedr.Capturer) {
+			go func(c capturer.Capturer) {
 				defer wg.Done()
 				d.runPerCapturer(ctx, c)
 			}(c)
@@ -366,7 +365,7 @@ func (d *DashboardServer) ensureInitialSnapshot() {
 	d.captureAndStore()
 }
 
-func (d *DashboardServer) runPerCapturer(ctx context.Context, c miniedr.Capturer) {
+func (d *DashboardServer) runPerCapturer(ctx context.Context, c capturer.Capturer) {
 	interval := capturer.DefaultIntervalFor(c)
 	if interval <= 0 {
 		interval = 5 * time.Second
@@ -1034,7 +1033,7 @@ func chartX(idx, total int) int {
 	return idx * step
 }
 
-func deriveGraphs(name string, info miniedr.InfoData) []graphInfo {
+func deriveGraphs(name string, info capturer.InfoData) []graphInfo {
 	up := strings.ToUpper(name)
 	var gs []graphInfo
 	switch {
@@ -1266,7 +1265,7 @@ func humanBytes(v float64) string {
 	}
 }
 
-func summarizeInfo(name string, info miniedr.InfoData) string {
+func summarizeInfo(name string, info capturer.InfoData) string {
 	up := strings.ToUpper(name)
 	m := info.Metrics
 	summary := info.Summary

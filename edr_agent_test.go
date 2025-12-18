@@ -9,11 +9,13 @@ import (
 	"time"
 
 	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/agent"
+	"github.com/jaewooli/miniedr/capturer"
 )
 
 type stubEDRCapturer struct {
 	captureErr error
-	info       miniedr.InfoData
+	info       capturer.InfoData
 	infoErr    error
 	capCalls   int
 	infoCalls  int
@@ -24,7 +26,7 @@ func (s *stubEDRCapturer) Capture() error {
 	return s.captureErr
 }
 
-func (s *stubEDRCapturer) GetInfo() (miniedr.InfoData, error) {
+func (s *stubEDRCapturer) GetInfo() (capturer.InfoData, error) {
 	s.infoCalls++
 	return s.info, s.infoErr
 }
@@ -59,8 +61,8 @@ func assertError(t testing.TB, err error, want string) {
 func TestEDRAgentRun(t *testing.T) {
 	t.Run("runs until context done", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		stub := &stubEDRCapturer{info: miniedr.InfoData{Summary: "ok"}}
-		edrAgent := miniedr.NewEDRAgent([]miniedr.CapturerSchedule{
+		stub := &stubEDRCapturer{info: capturer.InfoData{Summary: "ok"}}
+		edrAgent := agent.NewCollectAgent([]miniedr.CapturerSchedule{
 			{Capturer: stub, Interval: 5 * time.Millisecond},
 		})
 		edrAgent.Out = buf
@@ -80,8 +82,8 @@ func TestEDRAgentRun(t *testing.T) {
 
 	t.Run("returns capture error immediately", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		stub := &stubEDRCapturer{captureErr: errors.New("kaput"), info: miniedr.InfoData{Summary: "ok"}}
-		edrAgent := miniedr.NewEDRAgent([]miniedr.CapturerSchedule{
+		stub := &stubEDRCapturer{captureErr: errors.New("kaput"), info: capturer.InfoData{Summary: "ok"}}
+		edrAgent := agent.NewCollectAgent([]miniedr.CapturerSchedule{
 			{Capturer: stub, Interval: 5 * time.Millisecond},
 		})
 		edrAgent.Out = buf
@@ -96,7 +98,7 @@ func TestEDRAgentRun(t *testing.T) {
 	})
 
 	t.Run("errors when manager nil", func(t *testing.T) {
-		edrAgent := &miniedr.EDRAgent{}
+		edrAgent := &agent.CollectAgent{}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
