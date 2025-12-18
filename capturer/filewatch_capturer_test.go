@@ -1,4 +1,4 @@
-package miniedr_test
+package capturer_test
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 )
 
 func TestFileWatchCapturer(t *testing.T) {
@@ -18,7 +18,7 @@ func TestFileWatchCapturer(t *testing.T) {
 		t.Fatalf("write keep: %v", err)
 	}
 
-	w := &miniedr.FileWatchCapturer{
+	w := &capturer.FileWatchCapturer{
 		Paths:    []string{dir},
 		MaxFiles: 10,
 		WalkFn:   filepath.WalkDir,
@@ -54,7 +54,7 @@ func TestFileWatchCapturer(t *testing.T) {
 	assertEqual(t, got.Summary, "FileWatchSnapshot(at=1970-01-01T09:00:20+09:00, files=1, events=2, sample=created:new.txt(+1))")
 
 	t.Run("error when paths empty", func(t *testing.T) {
-		fw := &miniedr.FileWatchCapturer{Paths: nil, WalkFn: filepath.WalkDir}
+		fw := &capturer.FileWatchCapturer{Paths: nil, WalkFn: filepath.WalkDir}
 		err := fw.Capture()
 		assertError(t, err, "filewatch capturer: Paths is empty")
 	})
@@ -65,7 +65,7 @@ func TestFileWatchCapturer(t *testing.T) {
 			_ = os.WriteFile(filepath.Join(dir3, fmt.Sprintf("f%d.txt", i)), []byte("x"), 0o644)
 		}
 		scanned := 0
-		fw := &miniedr.FileWatchCapturer{
+		fw := &capturer.FileWatchCapturer{
 			Paths:    []string{dir3},
 			MaxFiles: 2,
 			WalkFn: func(root string, fn fs.WalkDirFunc) error {
@@ -89,7 +89,7 @@ func TestFileWatchCapturer(t *testing.T) {
 
 	t.Run("single event sample without suffix", func(t *testing.T) {
 		dir2 := t.TempDir()
-		w2 := &miniedr.FileWatchCapturer{
+		w2 := &capturer.FileWatchCapturer{
 			Paths:    []string{dir2},
 			MaxFiles: 10,
 			WalkFn:   filepath.WalkDir,
@@ -119,7 +119,7 @@ func TestFileWatchCapturer(t *testing.T) {
 func TestFileWatchCapturerVerbose(t *testing.T) {
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0)}
 	nowCalls := 0
-	filesSeq := []map[string]miniedr.FileMeta{
+	filesSeq := []map[string]capturer.FileMeta{
 		{
 			"/root/a.txt": {Size: 1, Mode: 0o644, ModTime: time.Unix(5, 0)},
 		},
@@ -146,7 +146,7 @@ func TestFileWatchCapturerVerbose(t *testing.T) {
 		return nil
 	}
 
-	w := &miniedr.FileWatchCapturer{
+	w := &capturer.FileWatchCapturer{
 		Paths: []string{"/root"},
 		Now: func() time.Time {
 			if nowCalls >= len(nowSeq) {

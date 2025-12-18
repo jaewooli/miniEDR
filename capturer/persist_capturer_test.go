@@ -1,10 +1,10 @@
-package miniedr_test
+package capturer_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 )
 
 func TestPersistCapturer(t *testing.T) {
@@ -17,8 +17,8 @@ func TestPersistCapturer(t *testing.T) {
 		},
 	}
 
-	p := &miniedr.PersistCapturer{
-		Sources: []miniedr.PersistSource{src},
+	p := &capturer.PersistCapturer{
+		Sources: []capturer.PersistSource{src},
 	}
 
 	got, err := p.GetInfo()
@@ -51,15 +51,15 @@ func TestPersistCapturer(t *testing.T) {
 	assertEqual(t, got.Summary, "PersistSnapshot(at=1970-01-01T09:00:30+09:00, sources=1, added=0, changed=1, removed=0)")
 
 	t.Run("error when sources empty", func(t *testing.T) {
-		p2 := &miniedr.PersistCapturer{Sources: nil}
+		p2 := &capturer.PersistCapturer{Sources: nil}
 		err := p2.Capture()
 		assertError(t, err, "persist capturer: Sources is empty")
 	})
 
 	t.Run("ignores nil source and bubbles source error", func(t *testing.T) {
 		errSrc := &errPersistSource{}
-		p3 := &miniedr.PersistCapturer{
-			Sources: []miniedr.PersistSource{nil, errSrc},
+		p3 := &capturer.PersistCapturer{
+			Sources: []capturer.PersistSource{nil, errSrc},
 		}
 		err := p3.Capture()
 		assertContains(t, err.Error(), "persist source \"err\" snapshot")
@@ -75,8 +75,8 @@ func TestPersistCapturerVerbose(t *testing.T) {
 		},
 	}
 
-	p := &miniedr.PersistCapturer{
-		Sources: []miniedr.PersistSource{src},
+	p := &capturer.PersistCapturer{
+		Sources: []capturer.PersistSource{src},
 	}
 
 	nowCalls := 0

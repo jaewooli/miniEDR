@@ -1,30 +1,30 @@
-package miniedr_test
+package capturer_test
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 	gnet "github.com/shirou/gopsutil/v4/net"
 )
 
 func TestNETCapturer(t *testing.T) {
-	n := &miniedr.NETCapturer{}
+	n := &capturer.NETCapturer{}
 
 	got, err := n.GetInfo()
 	assertError(t, err, "")
 	assertEqual(t, got.Summary, "NETSnapshot(empty)")
 
 	t.Run("error when IOFn nil", func(t *testing.T) {
-		n2 := &miniedr.NETCapturer{}
+		n2 := &capturer.NETCapturer{}
 		n2.IOFn = nil
 		err := n2.Capture()
 		assertError(t, err, "net capturer: IOFn is nil")
 	})
 
 	t.Run("handles interface reset (counters shrink) as zero delta", func(t *testing.T) {
-		n3 := &miniedr.NETCapturer{
+		n3 := &capturer.NETCapturer{
 			Now: func() time.Time { return time.Unix(0, 0) },
 			IOFn: func(pernic bool) ([]gnet.IOCountersStat, error) {
 				return []gnet.IOCountersStat{{Name: "eth0", BytesRecv: 100, BytesSent: 100}}, nil
@@ -79,7 +79,7 @@ func TestNETCapturer(t *testing.T) {
 }
 
 func TestConnCapturer(t *testing.T) {
-	c := &miniedr.ConnCapturer{
+	c := &capturer.ConnCapturer{
 		Kind: "all",
 	}
 
@@ -88,7 +88,7 @@ func TestConnCapturer(t *testing.T) {
 	assertEqual(t, got.Summary, "ConnSnapshot(empty)")
 
 	t.Run("propagates connection errors", func(t *testing.T) {
-		c2 := &miniedr.ConnCapturer{
+		c2 := &capturer.ConnCapturer{
 			Kind:          "all",
 			ConnectionsFn: func(kind string) ([]gnet.ConnectionStat, error) { return nil, fmt.Errorf("boom") },
 		}
@@ -134,7 +134,7 @@ func TestConnCapturer(t *testing.T) {
 }
 
 func TestNETCapturerVerbose(t *testing.T) {
-	n := &miniedr.NETCapturer{}
+	n := &capturer.NETCapturer{}
 
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(15, 0)}
 	nowCalls := 0
@@ -172,7 +172,7 @@ func TestNETCapturerVerbose(t *testing.T) {
 }
 
 func TestConnCapturerVerbose(t *testing.T) {
-	c := &miniedr.ConnCapturer{
+	c := &capturer.ConnCapturer{
 		Kind: "all",
 	}
 

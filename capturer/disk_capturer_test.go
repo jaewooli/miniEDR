@@ -1,15 +1,15 @@
-package miniedr_test
+package capturer_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 	"github.com/shirou/gopsutil/v4/disk"
 )
 
 func TestDISKCapturer(t *testing.T) {
-	d := &miniedr.DISKCapturer{
+	d := &capturer.DISKCapturer{
 		Paths: []string{"/mnt"},
 	}
 
@@ -18,7 +18,7 @@ func TestDISKCapturer(t *testing.T) {
 	assertEqual(t, got.Summary, "DISKSnapshot(empty)")
 
 	t.Run("error when UsageFn nil", func(t *testing.T) {
-		d2 := &miniedr.DISKCapturer{
+		d2 := &capturer.DISKCapturer{
 			Paths: []string{"/"},
 		}
 		d2.UsageFn = nil
@@ -27,7 +27,7 @@ func TestDISKCapturer(t *testing.T) {
 	})
 
 	t.Run("error when IOCountersFn nil", func(t *testing.T) {
-		d3 := &miniedr.DISKCapturer{
+		d3 := &capturer.DISKCapturer{
 			Paths:   []string{"/"},
 			UsageFn: func(path string) (*disk.UsageStat, error) { return &disk.UsageStat{Total: 1, Used: 1}, nil },
 		}
@@ -81,7 +81,7 @@ func TestDISKCapturer(t *testing.T) {
 }
 
 func TestDISKCapturerVerbose(t *testing.T) {
-	d := &miniedr.DISKCapturer{
+	d := &capturer.DISKCapturer{
 		Paths: []string{"/mnt"},
 	}
 

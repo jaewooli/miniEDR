@@ -1,16 +1,16 @@
-package miniedr_test
+package capturer_test
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
 func TestMemSnapShot(t *testing.T) {
-	memCapturer := &miniedr.MEMCapturer{}
+	memCapturer := &capturer.MEMCapturer{}
 
 	// deterministic time sequence
 	nowCalls := 0
@@ -101,7 +101,7 @@ func TestMemSnapShot(t *testing.T) {
 	})
 
 	t.Run("error when VirtualFn nil", func(t *testing.T) {
-		m2 := &miniedr.MEMCapturer{
+		m2 := &capturer.MEMCapturer{
 			SwapFn: mem.SwapMemory,
 			Now:    time.Now,
 		}
@@ -111,7 +111,7 @@ func TestMemSnapShot(t *testing.T) {
 	})
 
 	t.Run("zero totals avoid NaN", func(t *testing.T) {
-		m3 := &miniedr.MEMCapturer{
+		m3 := &capturer.MEMCapturer{
 			Now: func() time.Time { return time.Unix(0, 0) },
 			VirtualFn: func() (*mem.VirtualMemoryStat, error) {
 				return &mem.VirtualMemoryStat{Total: 0, Available: 0}, nil
@@ -130,7 +130,7 @@ func TestMemSnapShot(t *testing.T) {
 }
 
 func TestMemSnapshotVerbose(t *testing.T) {
-	memCapturer := &miniedr.MEMCapturer{}
+	memCapturer := &capturer.MEMCapturer{}
 
 	nowSeq := []time.Time{time.Unix(10, 0)}
 	nowCalls := 0

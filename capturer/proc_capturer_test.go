@@ -1,18 +1,18 @@
-package miniedr_test
+package capturer_test
 
 import (
 	"errors"
 	"testing"
 	"time"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 	"github.com/shirou/gopsutil/v4/process"
 )
 
 func TestProcCapturerVerbose(t *testing.T) {
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0)}
 	nowCalls := 0
-	c := &miniedr.ProcCapturer{
+	c := &capturer.ProcCapturer{
 		Now: func() time.Time {
 			if nowCalls >= len(nowSeq) {
 				return nowSeq[len(nowSeq)-1]
@@ -66,7 +66,7 @@ func TestProcCapturerVerbose(t *testing.T) {
 }
 
 func TestProcGetterErrorsStillCapture(t *testing.T) {
-	c := &miniedr.ProcCapturer{
+	c := &capturer.ProcCapturer{
 		Now: func() time.Time { return time.Unix(0, 0) },
 		ProcessesFn: func() ([]*process.Process, error) {
 			return []*process.Process{{Pid: 1}}, nil

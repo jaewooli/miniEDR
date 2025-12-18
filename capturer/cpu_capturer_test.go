@@ -1,23 +1,23 @@
-package miniedr_test
+package capturer_test
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 	"github.com/shirou/gopsutil/v4/cpu"
 )
 
 func TestCPUCapturer(t *testing.T) {
-	c := &miniedr.CPUCapturer{}
+	c := &capturer.CPUCapturer{}
 
 	got, err := c.GetInfo()
 	assertError(t, err, "")
 	assertEqual(t, got.Summary, "CPUSnapshot(empty)")
 
 	t.Run("error when TimesFn nil", func(t *testing.T) {
-		c2 := &miniedr.CPUCapturer{}
+		c2 := &capturer.CPUCapturer{}
 		c2.TimesFn = nil
 		err := c2.Capture()
 		assertError(t, err, "cpu capturer: TimesFn is nil")
@@ -76,7 +76,7 @@ func TestCPUCapturer(t *testing.T) {
 	assertEqual(t, got.Summary, "CPUSnapshot(at=1970-01-01T09:00:20+09:00, totalUsage=85.71%, cpu0=75.0% cpu1=50.0%)")
 
 	t.Run("counters decrease yields n/a and no metrics", func(t *testing.T) {
-		c2 := &miniedr.CPUCapturer{
+		c2 := &capturer.CPUCapturer{
 			Now: func() time.Time { return time.Unix(0, 0) },
 			TimesFn: func(percpu bool) ([]cpu.TimesStat, error) {
 				if percpu {
@@ -102,7 +102,7 @@ func TestCPUCapturer(t *testing.T) {
 }
 
 func TestCPUCapturerVerbose(t *testing.T) {
-	c := &miniedr.CPUCapturer{}
+	c := &capturer.CPUCapturer{}
 
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0)}
 	nowCalls := 0

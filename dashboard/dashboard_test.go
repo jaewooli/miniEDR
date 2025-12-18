@@ -1,4 +1,4 @@
-package miniedr_test
+package dashboard_test
 
 import (
 	"bufio"
@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 	"github.com/jaewooli/miniedr/dashboard"
 )
 
 type dashStub struct {
 	name    string
-	info    miniedr.InfoData
+	info    capturer.InfoData
 	verbose string
 	err     error
 }
@@ -36,18 +36,18 @@ func (c *changingStub) Capture() error {
 	}
 	return nil
 }
-func (c *changingStub) GetInfo() (miniedr.InfoData, error) {
+func (c *changingStub) GetInfo() (capturer.InfoData, error) {
 	if c.idx < 0 {
-		return miniedr.InfoData{}, nil
+		return capturer.InfoData{}, nil
 	}
-	return miniedr.InfoData{Summary: c.infos[c.idx]}, nil
+	return capturer.InfoData{Summary: c.infos[c.idx]}, nil
 }
 func (c *changingStub) GetVerboseInfo() (string, error) { return "", nil }
 
 func (d *dashStub) Capture() error { return d.err }
-func (d *dashStub) GetInfo() (miniedr.InfoData, error) {
+func (d *dashStub) GetInfo() (capturer.InfoData, error) {
 	if d.err != nil {
-		return miniedr.InfoData{}, d.err
+		return capturer.InfoData{}, d.err
 	}
 	return d.info, nil
 }
@@ -59,9 +59,9 @@ func (d *dashStub) GetVerboseInfo() (string, error) {
 }
 
 func TestDashboardSnapshotAndRender(t *testing.T) {
-	cs := miniedr.Capturers{
-		&dashStub{name: "CPUCapturer", info: miniedr.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=1.1%)"}, verbose: "cpu verbose"},
-		&dashStub{name: "MEMCapturer", info: miniedr.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=0B Avail=0B UsedApprox=0B (0.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}, verbose: "mem verbose"},
+	cs := capturer.Capturers{
+		&dashStub{name: "CPUCapturer", info: capturer.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=1.1%)"}, verbose: "cpu verbose"},
+		&dashStub{name: "MEMCapturer", info: capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=0B Avail=0B UsedApprox=0B (0.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}, verbose: "mem verbose"},
 	}
 	ds := dashboard.NewDashboardServer(cs, "TestDash", true)
 
@@ -87,7 +87,7 @@ func TestDashboardSnapshotAndRender(t *testing.T) {
 
 func TestDashboardChangedFlag(t *testing.T) {
 	changing := &changingStub{name: "cpu", infos: []string{"cpu info v1", "cpu info v2"}, idx: -1}
-	ds := dashboard.NewDashboardServer(miniedr.Capturers{changing}, "TestDash", false)
+	ds := dashboard.NewDashboardServer(capturer.Capturers{changing}, "TestDash", false)
 	ds.SetNowFunc(func() time.Time { return time.Unix(100, 0) })
 
 	ds.CaptureNow()
@@ -113,7 +113,7 @@ func TestDashboardChangedIgnoresTimestamps(t *testing.T) {
 		"CPUSnapshot(at=1970-01-01T00:00:10Z, totalUsage=10%)",
 		"CPUSnapshot(at=1970-01-01T00:00:20Z, totalUsage=10%)",
 	}}
-	ds := dashboard.NewDashboardServer(miniedr.Capturers{changing}, "TestDash", false)
+	ds := dashboard.NewDashboardServer(capturer.Capturers{changing}, "TestDash", false)
 	ds.SetNowFunc(func() time.Time { return time.Unix(100, 0) })
 
 	ds.CaptureNow()
@@ -146,8 +146,8 @@ func readBody(t *testing.T, res *http.Response) string {
 }
 
 func TestDashboardEventStream(t *testing.T) {
-	ds := dashboard.NewDashboardServer(miniedr.Capturers{
-		&dashStub{name: "cpu", info: miniedr.InfoData{Summary: "cpu info"}},
+	ds := dashboard.NewDashboardServer(capturer.Capturers{
+		&dashStub{name: "cpu", info: capturer.InfoData{Summary: "cpu info"}},
 	}, "TestDash", false)
 	ds.SetNowFunc(func() time.Time { return time.Unix(200, 0) })
 	ds.SetAutoRefresh(false, 10)
@@ -219,5 +219,12 @@ func TestDashboardEventStream(t *testing.T) {
 		case <-timeout:
 			t.Fatalf("expected event after capture")
 		}
+	}
+}
+
+func assertContains(t testing.TB, s, sub string) {
+	t.Helper()
+	if !strings.Contains(s, sub) {
+		t.Fatalf("want substring %q in %q", sub, s)
 	}
 }

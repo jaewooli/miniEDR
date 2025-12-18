@@ -1,4 +1,4 @@
-package miniedr_test
+package capturer_test
 
 import (
 	"fmt"
@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 )
 
 type StubCapturer struct{}
 
-func (s *StubCapturer) GetInfo() (miniedr.InfoData, error) { return miniedr.InfoData{}, nil }
-func (s *StubCapturer) Capture() error                     { return nil }
+func (s *StubCapturer) GetInfo() (capturer.InfoData, error) { return capturer.InfoData{}, nil }
+func (s *StubCapturer) Capture() error                      { return nil }
 
 type stubPersistSource struct {
 	name      string
@@ -41,7 +41,7 @@ func (e *errPersistSource) Snapshot() (map[string]string, error) {
 	return nil, fmt.Errorf("snap fail")
 }
 
-func assertCapturers(t *testing.T, got, want miniedr.Capturers) {
+func assertCapturers(t *testing.T, got, want capturer.Capturers) {
 	t.Helper()
 	for i, capturer := range got {
 		capturerVal := reflect.ValueOf(capturer).Elem()

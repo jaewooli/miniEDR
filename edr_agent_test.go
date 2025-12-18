@@ -29,6 +29,33 @@ func (s *stubEDRCapturer) GetInfo() (miniedr.InfoData, error) {
 	return s.info, s.infoErr
 }
 
+func assertTrue(t testing.TB, got bool) {
+	t.Helper()
+	if !got {
+		t.Fatalf("expected true, got false")
+	}
+}
+
+func assertEqual[T comparable](t testing.TB, got, want T) {
+	t.Helper()
+	if got != want {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+}
+
+func assertError(t testing.TB, err error, want string) {
+	t.Helper()
+	if want == "" {
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return
+	}
+	if err == nil || err.Error() != want {
+		t.Fatalf("want error %q, got %v", want, err)
+	}
+}
+
 func TestEDRAgentRun(t *testing.T) {
 	t.Run("runs until context done", func(t *testing.T) {
 		buf := &bytes.Buffer{}

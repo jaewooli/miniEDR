@@ -1,4 +1,4 @@
-package miniedr_test
+package capturer_test
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -43,7 +43,7 @@ func TestCapturerTableDriven(t *testing.T) {
 					},
 				}
 
-				c := &miniedr.CPUCapturer{
+				c := &capturer.CPUCapturer{
 					Now: time.Now,
 					TimesFn: func(percpu bool) ([]cpu.TimesStat, error) {
 						idx := call / 2
@@ -66,7 +66,7 @@ func TestCapturerTableDriven(t *testing.T) {
 		{
 			name: "mem includes swap percent",
 			run: func(t *testing.T) {
-				m := &miniedr.MEMCapturer{
+				m := &capturer.MEMCapturer{
 					Now: func() time.Time { return time.Unix(0, 0) },
 					VirtualFn: func() (*mem.VirtualMemoryStat, error) {
 						return &mem.VirtualMemoryStat{Total: 100, Available: 50, Free: 10, Buffers: 5, Cached: 5}, nil
@@ -83,7 +83,7 @@ func TestCapturerTableDriven(t *testing.T) {
 		{
 			name: "disk io rate computed",
 			run: func(t *testing.T) {
-				d := &miniedr.DISKCapturer{
+				d := &capturer.DISKCapturer{
 					Paths: []string{"/"},
 					Now: func() time.Time {
 						return time.Unix(0, 0)
@@ -109,7 +109,7 @@ func TestCapturerTableDriven(t *testing.T) {
 		{
 			name: "net rates sum multiple ifaces",
 			run: func(t *testing.T) {
-				n := &miniedr.NETCapturer{
+				n := &capturer.NETCapturer{
 					Now: func() time.Time { return time.Unix(0, 0) },
 					IOFn: func(pernic bool) ([]gnet.IOCountersStat, error) {
 						return []gnet.IOCountersStat{
@@ -136,7 +136,7 @@ func TestCapturerTableDriven(t *testing.T) {
 			name: "filewatch detects created",
 			run: func(t *testing.T) {
 				dir := t.TempDir()
-				w := &miniedr.FileWatchCapturer{
+				w := &capturer.FileWatchCapturer{
 					Paths:    []string{dir},
 					MaxFiles: 10,
 					WalkFn:   filepath.WalkDir,
@@ -153,7 +153,7 @@ func TestCapturerTableDriven(t *testing.T) {
 		{
 			name: "proc detects new pid",
 			run: func(t *testing.T) {
-				p := &miniedr.ProcCapturer{
+				p := &capturer.ProcCapturer{
 					Now: func() time.Time { return time.Unix(0, 0) },
 					ProcessesFn: func() ([]*process.Process, error) {
 						return []*process.Process{{Pid: 1}}, nil
@@ -184,9 +184,9 @@ func TestCapturerTableDriven(t *testing.T) {
 						{"a": "1", "b": "2"},
 					},
 				}
-				p := &miniedr.PersistCapturer{
+				p := &capturer.PersistCapturer{
 					Now:     func() time.Time { return time.Unix(0, 0) },
-					Sources: []miniedr.PersistSource{src},
+					Sources: []capturer.PersistSource{src},
 				}
 				_ = p.Capture()
 				p.Now = func() time.Time { return time.Unix(5, 0) }
@@ -198,7 +198,7 @@ func TestCapturerTableDriven(t *testing.T) {
 		{
 			name: "disk error bubble",
 			run: func(t *testing.T) {
-				d := &miniedr.DISKCapturer{
+				d := &capturer.DISKCapturer{
 					Paths:   []string{"/"},
 					UsageFn: func(path string) (*disk.UsageStat, error) { return nil, fmt.Errorf("boom") },
 					IOCountersFn: func(names ...string) (map[string]disk.IOCountersStat, error) {
@@ -212,7 +212,7 @@ func TestCapturerTableDriven(t *testing.T) {
 		{
 			name: "net handles new iface",
 			run: func(t *testing.T) {
-				n := &miniedr.NETCapturer{
+				n := &capturer.NETCapturer{
 					Now: func() time.Time { return time.Unix(0, 0) },
 					IOFn: func(pernic bool) ([]gnet.IOCountersStat, error) {
 						return []gnet.IOCountersStat{{Name: "eth0", BytesRecv: 10, BytesSent: 10}}, nil
