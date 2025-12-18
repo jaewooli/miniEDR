@@ -1,4 +1,4 @@
-package miniedr
+package capturer
 
 // Config structures for enabling/disabling capturers and their options.
 

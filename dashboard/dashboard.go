@@ -13,12 +13,13 @@ import (
 	"time"
 
 	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/capturer"
 )
 
 // DashboardServer exposes a lightweight HTML dashboard to view capturer snapshots.
 // It maintains a background capture loop and can push refresh events to the UI.
 type DashboardServer struct {
-	Capturers miniedr.Capturers
+	Capturers capturer.Capturers
 
 	mu              sync.RWMutex
 	tmpl            *template.Template
@@ -78,7 +79,7 @@ type dashboardData struct {
 	CaptureIntervalMS int64
 }
 
-func NewDashboardServer(capturers miniedr.Capturers, title string, verbose bool) *DashboardServer {
+func NewDashboardServer(capturers capturer.Capturers, title string, verbose bool) *DashboardServer {
 	t := template.Must(template.New("dashboard").Funcs(template.FuncMap{
 		"divMS":  divMS,
 		"chartX": chartX,
@@ -212,7 +213,7 @@ func (d *DashboardServer) captureAndStore() {
 }
 
 func (d *DashboardServer) captureSingle(c miniedr.Capturer, ref, title string, verbose bool, autoRefresh bool, refreshSecs int, eventRefresh bool, capInterval time.Duration) {
-	name := miniedr.CapturerName(c)
+	name := capturer.CapturerName(c)
 
 	item := dashboardItem{Name: name}
 
@@ -284,7 +285,7 @@ func (d *DashboardServer) captureSingle(c miniedr.Capturer, ref, title string, v
 		d.itemIntervals = make(map[string]time.Duration)
 	}
 	d.items[name] = item
-	d.itemIntervals[name] = miniedr.DefaultIntervalFor(c)
+	d.itemIntervals[name] = capturer.DefaultIntervalFor(c)
 
 	// rebuild items slice
 	items := make([]dashboardItem, 0, len(d.items))
@@ -324,7 +325,7 @@ func (d *DashboardServer) currentSnapshot() dashboardData {
 func (d *DashboardServer) captureLoop(ctx context.Context) {
 	d.mu.RLock()
 	interval := d.captureInterval
-	capturers := append(miniedr.Capturers{}, d.Capturers...)
+	capturers := append(capturer.Capturers{}, d.Capturers...)
 	d.mu.RUnlock()
 
 	// per-capturer intervals when interval == 0
@@ -366,7 +367,7 @@ func (d *DashboardServer) ensureInitialSnapshot() {
 }
 
 func (d *DashboardServer) runPerCapturer(ctx context.Context, c miniedr.Capturer) {
-	interval := miniedr.DefaultIntervalFor(c)
+	interval := capturer.DefaultIntervalFor(c)
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
@@ -380,7 +381,7 @@ func (d *DashboardServer) runPerCapturer(ctx context.Context, c miniedr.Capturer
 	eventRefresh := d.eventRefresh
 	capInterval := d.displayInterval
 	hasSnap := d.hasSnapshot
-	name := miniedr.CapturerName(c)
+	name := capturer.CapturerName(c)
 	_, hasItem := d.items[name]
 	d.mu.RUnlock()
 
@@ -968,10 +969,10 @@ func divMS(ms int64) float64 {
 	return float64(ms) / 1000.0
 }
 
-func minCapturerInterval(cs miniedr.Capturers) time.Duration {
+func minCapturerInterval(cs capturer.Capturers) time.Duration {
 	var min time.Duration
 	for _, c := range cs {
-		iv := miniedr.DefaultIntervalFor(c)
+		iv := capturer.DefaultIntervalFor(c)
 		if iv <= 0 {
 			continue
 		}

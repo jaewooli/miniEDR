@@ -1,4 +1,4 @@
-package miniedr
+package capturer
 
 import (
 	"reflect"

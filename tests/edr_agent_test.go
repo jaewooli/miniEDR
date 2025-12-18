@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/jaewooli/miniedr"
-	"github.com/jaewooli/miniedr/agent"
 )
 
 type stubEDRCapturer struct {
@@ -34,7 +33,7 @@ func TestEDRAgentRun(t *testing.T) {
 	t.Run("runs until context done", func(t *testing.T) {
 		buf := &bytes.Buffer{}
 		stub := &stubEDRCapturer{info: miniedr.InfoData{Summary: "ok"}}
-		edrAgent := agent.NewEDRAgent([]miniedr.CapturerSchedule{
+		edrAgent := miniedr.NewEDRAgent([]miniedr.CapturerSchedule{
 			{Capturer: stub, Interval: 5 * time.Millisecond},
 		})
 		edrAgent.Out = buf
@@ -55,7 +54,7 @@ func TestEDRAgentRun(t *testing.T) {
 	t.Run("returns capture error immediately", func(t *testing.T) {
 		buf := &bytes.Buffer{}
 		stub := &stubEDRCapturer{captureErr: errors.New("kaput"), info: miniedr.InfoData{Summary: "ok"}}
-		edrAgent := agent.NewEDRAgent([]miniedr.CapturerSchedule{
+		edrAgent := miniedr.NewEDRAgent([]miniedr.CapturerSchedule{
 			{Capturer: stub, Interval: 5 * time.Millisecond},
 		})
 		edrAgent.Out = buf
@@ -70,7 +69,7 @@ func TestEDRAgentRun(t *testing.T) {
 	})
 
 	t.Run("errors when manager nil", func(t *testing.T) {
-		edrAgent := &agent.EDRAgent{}
+		edrAgent := &miniedr.EDRAgent{}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
