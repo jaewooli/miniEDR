@@ -38,6 +38,7 @@ type DashboardServer struct {
 	logs          map[string][]dashboardLogEntry
 	items         map[string]dashboardItem
 	itemIntervals map[string]time.Duration
+	netScales     map[string]float64
 }
 
 type dashboardItem struct {
@@ -66,6 +67,7 @@ type graphInfo struct {
 	Value     float64
 	Display   float64
 	ValueText string
+	MaxHint   string // optional hint about the scale (e.g., "scale=10MB/s")
 }
 
 type dashboardData struct {
@@ -234,7 +236,8 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 					}
 				}
 			}
-			item.Graphs = append(item.Graphs, deriveGraphs(name, item.Info)...)
+			netScale := d.updateNetScale(name, item.Info)
+			item.Graphs = append(item.Graphs, deriveGraphs(name, item.Info, netScale)...)
 			item.Display = summarizeInfo(name, item.Info)
 		}
 	}
@@ -628,6 +631,10 @@ button:hover {
   line-height: 1.2;
   word-break: break-word;
 }
+.gauge-hint {
+  font-size: 11px;
+  color: #64748b;
+}
 .gauge-label.gauge-label-small {
   font-size: 12px;
 }
@@ -784,6 +791,7 @@ small {
                   <div class="gauge-center">
                     <div>{{if .ValueText}}{{.ValueText}}{{else}}{{printf "%.1f%%" .Value}}{{end}}</div>
                     <div class="gauge-label {{if hasNL .Label}}gauge-label-small{{end}}">{{.Label}}</div>
+                    {{if .MaxHint}}<div class="gauge-hint">{{.MaxHint}}</div>{{end}}
                   </div>
                 </div>
                 {{end}}
@@ -796,6 +804,7 @@ small {
                   <div class="gauge-center">
                     <div>{{if .ValueText}}{{.ValueText}}{{else}}{{printf "%.1f%%" .Value}}{{end}}</div>
                     <div class="gauge-label {{if hasNL .Label}}gauge-label-small{{end}}">{{.Label}}</div>
+                    {{if .MaxHint}}<div class="gauge-hint">{{.MaxHint}}</div>{{end}}
                   </div>
                 </div>
                 {{end}}
@@ -808,6 +817,7 @@ small {
                   <div class="gauge-center">
                     <div>{{if .ValueText}}{{.ValueText}}{{else}}{{printf "%.1f%%" .Value}}{{end}}</div>
                     <div class="gauge-label {{if hasNL .Label}}gauge-label-small{{end}}">{{.Label}}</div>
+                    {{if .MaxHint}}<div class="gauge-hint">{{.MaxHint}}</div>{{end}}
                   </div>
                 </div>
                 {{end}}
@@ -1024,6 +1034,52 @@ func metricInt(m map[string]float64, key string) int {
 	return -1
 }
 
+// updateNetScale keeps a per-capturer dynamic scale for NET graphs.
+func (d *DashboardServer) updateNetScale(name string, info capturer.InfoData) float64 {
+	rx, tx, ok := extractRatesMetrics(info)
+	if !ok {
+		return 0
+	}
+	total := rx + tx
+	if total <= 0 {
+		return 0
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.netScales == nil {
+		d.netScales = make(map[string]float64)
+	}
+	scale := d.netScales[name]
+	if scale <= 0 {
+		scale = autoNetScale(total)
+	}
+	if total > scale {
+		scale = total * 1.2
+	}
+	// Decay scale when traffic is much lower to keep gauge responsive.
+	if total < scale/3 {
+		scale = scale * 0.7
+		if scale < 256*1024 {
+			scale = 256 * 1024
+		}
+	}
+	d.netScales[name] = scale
+	return scale
+}
+
+func extractRatesMetrics(info capturer.InfoData) (float64, float64, bool) {
+	rx, rxOk := metricVal(info.Metrics, "net.rx_bytes_per_sec")
+	tx, txOk := metricVal(info.Metrics, "net.tx_bytes_per_sec")
+	if rxOk && txOk {
+		return rx, tx, true
+	}
+	if rxStr, txStr, ok := extractRates(info.Summary); ok {
+		return rxStr, txStr, true
+	}
+	return 0, 0, false
+}
+
 func chartX(idx, total int) int {
 	if total <= 1 {
 		return 0
@@ -1033,7 +1089,7 @@ func chartX(idx, total int) int {
 	return idx * step
 }
 
-func deriveGraphs(name string, info capturer.InfoData) []graphInfo {
+func deriveGraphs(name string, info capturer.InfoData, netScale float64) []graphInfo {
 	up := strings.ToUpper(name)
 	var gs []graphInfo
 	switch {
@@ -1072,14 +1128,23 @@ func deriveGraphs(name string, info capturer.InfoData) []graphInfo {
 		}
 		if rxOk && txOk {
 			total := rx + tx
-			// scale vs 10MB/s budget (closer to Task Manager small-host view)
-			pct := (total / (10 * 1024 * 1024)) * 100
+			scale := netScale
+			if scale <= 0 {
+				scale = autoNetScale(total)
+			}
+			pct := (total / scale) * 100
 			if pct > 100 {
 				pct = 100
 			}
 			pct = clampGraphValue(pct)
 			rateText := fmt.Sprintf("%s/s", humanBytes(total))
-			gs = append(gs, graphInfo{Label: "NET\nthroughput", Value: pct, Display: pct, ValueText: rateText})
+			gs = append(gs, graphInfo{
+				Label:     "NET\nthroughput",
+				Value:     pct,
+				Display:   pct,
+				ValueText: rateText,
+				MaxHint:   fmt.Sprintf("Max=%s/s", humanBytes(scale)),
+			})
 		}
 	case strings.Contains(up, "CONN"):
 		total := metricInt(info.Metrics, "conn.total")
@@ -1377,4 +1442,23 @@ func humanBytesString(s string) string {
 		return ""
 	}
 	return humanBytes(v)
+}
+func autoNetScale(total float64) float64 {
+	// auto-scale to a near-upper bucket so gauges remain readable
+	switch {
+	case total >= 100*1024*1024:
+		return 100 * 1024 * 1024
+	case total >= 50*1024*1024:
+		return 50 * 1024 * 1024
+	case total >= 10*1024*1024:
+		return 10 * 1024 * 1024
+	case total >= 5*1024*1024:
+		return 5 * 1024 * 1024
+	case total >= 1*1024*1024:
+		return 1 * 1024 * 1024
+	case total >= 512*1024:
+		return 512 * 1024
+	default:
+		return 256 * 1024
+	}
 }

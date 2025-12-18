@@ -13,16 +13,16 @@ func TestDeriveGraphVariants(t *testing.T) {
 		graphs []graphInfo
 		expect func([]graphInfo) bool
 	}{
-		{"cpu total", deriveGraphs("CPUCapturer", capturer.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=1.1%, cpu0=0.5%)"}), func(g []graphInfo) bool { return len(g) == 1 && g[0].Label == "CPU avg" && g[0].Value == 1.1 }},
-		{"mem zero", deriveGraphs("MEMCapturer", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=0B Avail=0B UsedApprox=0B (0.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}), func(g []graphInfo) bool { return len(g) >= 1 && g[0].Label == "RAM used" && g[0].Value == 0 }},
-		{"mem nonzero", deriveGraphs("MEMCapturer", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=100B Avail=10B UsedApprox=90B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}), func(g []graphInfo) bool { return len(g) >= 1 && g[0].Label == "RAM used" && g[0].Value > 26 }},
-		{"mem with swap", deriveGraphs("MEMCapturer", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=100B Avail=10B UsedApprox=90B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=10B Used=5B (50.00%) Free=0B, Sin=0B Sout=0B)"}), func(g []graphInfo) bool { return len(g) == 2 && g[1].Label == "Swap used" && g[1].Value == 50 }},
-		{"disk used", deriveGraphs("DISKCapturer", capturer.InfoData{Summary: "DISKSnapshot(at=..., / used=50.00% (500/1000B), ioRate=read 0B/s write 0B/s, devices=1)"}), func(g []graphInfo) bool { return len(g) == 1 && g[0].Label == "DISK used" && g[0].Value == 50 }},
-		{"disk zero", deriveGraphs("DISKCapturer", capturer.InfoData{Summary: "DISKSnapshot(at=..., / used=0.00% (0/1000B), ioRate=read 0B/s write 0B/s, devices=1)"}), func(g []graphInfo) bool { return len(g) == 1 && g[0].Value == 0 }},
-		{"net rate", deriveGraphs("NETCapturer", capturer.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=1048576B/s, txRate=1048576B/s)"}), func(g []graphInfo) bool { return len(g) == 1 && strings.HasPrefix(g[0].Label, "NET") && g[0].Value > 0 }},
-		{"net zero", deriveGraphs("NETCapturer", capturer.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=0B/s, txRate=0B/s)"}), func(g []graphInfo) bool { return len(g) == 1 && strings.HasPrefix(g[0].Label, "NET") }},
-		{"unknown capturer", deriveGraphs("FooCapturer", capturer.InfoData{Summary: "random text"}), func(g []graphInfo) bool { return len(g) == 0 }},
-		{"file change events", deriveGraphs("FileChangeCapturer", capturer.InfoData{Summary: "FileChangeSnapshot(at=..., files=3, events=5, sample=created:a.txt)"}), func(g []graphInfo) bool {
+		{"cpu total", deriveGraphs("CPUCapturer", capturer.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=1.1%, cpu0=0.5%)"}, 0), func(g []graphInfo) bool { return len(g) == 1 && g[0].Label == "CPU avg" && g[0].Value == 1.1 }},
+		{"mem zero", deriveGraphs("MEMCapturer", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=0B Avail=0B UsedApprox=0B (0.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}, 0), func(g []graphInfo) bool { return len(g) >= 1 && g[0].Label == "RAM used" && g[0].Value == 0 }},
+		{"mem nonzero", deriveGraphs("MEMCapturer", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=100B Avail=10B UsedApprox=90B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}, 0), func(g []graphInfo) bool { return len(g) >= 1 && g[0].Label == "RAM used" && g[0].Value > 26 }},
+		{"mem with swap", deriveGraphs("MEMCapturer", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=100B Avail=10B UsedApprox=90B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=10B Used=5B (50.00%) Free=0B, Sin=0B Sout=0B)"}, 0), func(g []graphInfo) bool { return len(g) == 2 && g[1].Label == "Swap used" && g[1].Value == 50 }},
+		{"disk used", deriveGraphs("DISKCapturer", capturer.InfoData{Summary: "DISKSnapshot(at=..., / used=50.00% (500/1000B), ioRate=read 0B/s write 0B/s, devices=1)"}, 0), func(g []graphInfo) bool { return len(g) == 1 && g[0].Label == "DISK used" && g[0].Value == 50 }},
+		{"disk zero", deriveGraphs("DISKCapturer", capturer.InfoData{Summary: "DISKSnapshot(at=..., / used=0.00% (0/1000B), ioRate=read 0B/s write 0B/s, devices=1)"}, 0), func(g []graphInfo) bool { return len(g) == 1 && g[0].Value == 0 }},
+		{"net rate", deriveGraphs("NETCapturer", capturer.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=1048576B/s, txRate=1048576B/s)"}, 0), func(g []graphInfo) bool { return len(g) == 1 && strings.HasPrefix(g[0].Label, "NET") && g[0].Value > 0 }},
+		{"net zero", deriveGraphs("NETCapturer", capturer.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=0B/s, txRate=0B/s)"}, 0), func(g []graphInfo) bool { return len(g) == 1 && strings.HasPrefix(g[0].Label, "NET") }},
+		{"unknown capturer", deriveGraphs("FooCapturer", capturer.InfoData{Summary: "random text"}, 0), func(g []graphInfo) bool { return len(g) == 0 }},
+		{"file change events", deriveGraphs("FileChangeCapturer", capturer.InfoData{Summary: "FileChangeSnapshot(at=..., files=3, events=5, sample=created:a.txt)"}, 0), func(g []graphInfo) bool {
 			return len(g) == 1 && g[0].Label == "File events" && g[0].Value == 5
 		}},
 	}
