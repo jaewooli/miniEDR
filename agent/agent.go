@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/user"
+	"reflect"
 	"sync"
 	"time"
 
@@ -31,7 +32,9 @@ type CollectAgent struct {
 	sessionID string
 	Sinks     []miniedr.TelemetrySink
 
-	Errs []error
+	mu        sync.Mutex
+	Errs      []error
+	sinkStats map[string]*sinkStat
 }
 
 func NewCollectAgent(schedules []CapturerSchedule) *CollectAgent {
@@ -44,6 +47,7 @@ func NewCollectAgent(schedules []CapturerSchedule) *CollectAgent {
 		hostName:        host,
 		timezone:        tz,
 		sessionID:       newSessionID(),
+		sinkStats:       map[string]*sinkStat{},
 	}
 }
 
@@ -62,6 +66,9 @@ func (a *CollectAgent) Run(ctx context.Context) error {
 	}
 	if a.DefaultInterval <= 0 {
 		a.DefaultInterval = 5 * time.Second
+	}
+	if a.sinkStats == nil {
+		a.sinkStats = map[string]*sinkStat{}
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -136,7 +143,10 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer) error {
 		}
 		if err := sink.Consume(info); err != nil {
 			fmt.Fprintf(a.Out, "[%s] sink error: %v\n", capturer.CapturerName(c), err)
+			a.recordSinkResult(sink, err)
+			continue
 		}
+		a.recordSinkResult(sink, nil)
 	}
 
 	fmt.Fprintf(a.Out, "[%s] %s\n", capturer.CapturerName(c), info.Summary)
@@ -176,12 +186,64 @@ func (a *CollectAgent) recordErr(err error) {
 	if err == nil {
 		return
 	}
+	a.mu.Lock()
 	a.Errs = append(a.Errs, err)
+	a.mu.Unlock()
 }
 
 func (a *CollectAgent) firstErrorOr(fallback error) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if len(a.Errs) > 0 {
 		return a.Errs[0]
 	}
 	return fallback
+}
+
+// sinkStat tracks success/failure counts and last error per sink.
+type sinkStat struct {
+	Success int
+	Failure int
+	LastErr error
+}
+
+// SinkStats returns a snapshot of sink outcomes keyed by sink type name.
+func (a *CollectAgent) SinkStats() map[string]sinkStat {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make(map[string]sinkStat, len(a.sinkStats))
+	for k, v := range a.sinkStats {
+		out[k] = *v
+	}
+	return out
+}
+
+func (a *CollectAgent) recordSinkResult(s miniedr.TelemetrySink, err error) {
+	if s == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	name := sinkName(s)
+	stat, ok := a.sinkStats[name]
+	if !ok {
+		stat = &sinkStat{}
+		a.sinkStats[name] = stat
+	}
+	if err != nil {
+		stat.Failure++
+		stat.LastErr = err
+		a.Errs = append(a.Errs, err)
+		return
+	}
+	stat.Success++
+	stat.LastErr = nil
+}
+
+func sinkName(s miniedr.TelemetrySink) string {
+	t := reflect.TypeOf(s)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t.Name()
 }

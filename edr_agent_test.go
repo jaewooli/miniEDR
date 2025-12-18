@@ -37,6 +37,21 @@ func (s *stubEDRCapturer) GetInfo() (capturer.InfoData, error) {
 	return s.info, s.infoErr
 }
 
+type stubSink struct {
+	errs     []error
+	consumed int
+}
+
+func (s *stubSink) Consume(_ capturer.InfoData) error {
+	s.consumed++
+	if len(s.errs) == 0 {
+		return nil
+	}
+	err := s.errs[0]
+	s.errs = s.errs[1:]
+	return err
+}
+
 func assertTrue(t testing.TB, got bool) {
 	t.Helper()
 	if !got {
@@ -115,6 +130,35 @@ func TestEDRAgentRun(t *testing.T) {
 		if strings.Count(buf.String(), "ok") < 1 {
 			t.Fatalf("expected output after successful capture, got %q", buf.String())
 		}
+	})
+
+	t.Run("records sink errors and stats", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		stub := &stubEDRCapturer{info: capturer.InfoData{Summary: "ok"}}
+		sink := &stubSink{errs: []error{errors.New("sink kaput")}}
+		edrAgent := agent.NewCollectAgent([]miniedr.CapturerSchedule{
+			{Capturer: stub, Interval: 5 * time.Millisecond},
+		})
+		edrAgent.Out = buf
+		edrAgent.AddSink(sink)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+
+		err := edrAgent.Run(ctx)
+		if err == nil || !strings.Contains(err.Error(), "sink kaput") {
+			t.Fatalf("want sink error returned, got %v", err)
+		}
+		stats := edrAgent.SinkStats()
+		ss, ok := stats["stubSink"]
+		if !ok {
+			t.Fatalf("expected sink stats present, got %+v", stats)
+		}
+		assertTrue(t, ss.Failure >= 1)
+		assertTrue(t, ss.Success >= 1)
+		if ss.LastErr != nil {
+			t.Fatalf("expected last error cleared after success, got %v", ss.LastErr)
+		}
+		assertTrue(t, sink.consumed >= 2)
 	})
 
 	t.Run("returns capture error immediately", func(t *testing.T) {
