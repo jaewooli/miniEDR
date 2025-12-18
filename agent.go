@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -135,14 +134,6 @@ func (a *EDRAgent) captureOnce(c Capturer) error {
 		fmt.Fprintf(a.Out, "\n==== %s (verbose) @ %s ====\n%s\n", typeName(c), ts, verboseInfo)
 	}
 	return nil
-}
-
-func typeName(c Capturer) string {
-	t := reflect.TypeOf(c)
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	return t.Name()
 }
 
 // DefaultSchedules assigns reasonable intervals per capturer type.

@@ -3,22 +3,14 @@ package miniedr
 import (
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"os"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // InfoData carries both human readable text and structured metrics to avoid downstream string parsing.
 // Summary should remain concise and stable for display/logging.
-type InfoData struct {
-	Summary string
-	// Metrics holds numeric values keyed by dotted names (e.g. "cpu.total_pct").
-	// Keeping it flat makes it easier for dashboards or alerts to consume without custom parsers.
-	Metrics map[string]float64
-	// Fields can carry non-numeric metadata if needed. Leave nil when unused.
-	Fields map[string]interface{}
-}
-
 type Info interface {
 	GetInfo() (InfoData, error)
 }
@@ -48,85 +40,14 @@ func (cb *CapturersBuilder) SetConfigFile(path string) {
 	cb.configFile = path
 }
 
-type CapturerToggle struct {
-	Enabled bool `yaml:"enabled"`
-}
-
-type ConnCfg struct {
-	Enabled bool   `yaml:"enabled"`
-	Kind    string `yaml:"kind"` // tcp/udp/all
-}
-
-type DiskCfg struct {
-	Enabled bool     `yaml:"enabled"`
-	Paths   []string `yaml:"paths"`
-}
-
-type FileWatchCfg struct {
-	Enabled  bool     `yaml:"enabled"`
-	Paths    []string `yaml:"paths"`
-	MaxFiles int      `yaml:"max_files"`
-}
-
-type CapturersConfig struct {
-	Capturers struct {
-		CPU       CapturerToggle `yaml:"cpu"`
-		Conn      ConnCfg        `yaml:"conn"`
-		Disk      DiskCfg        `yaml:"disk"`
-		FileWatch FileWatchCfg   `yaml:"filewatch"`
-		MEM       CapturerToggle `yaml:"mem"`
-		NET       CapturerToggle `yaml:"net"`
-		Persist   CapturerToggle `yaml:"persist"`
-		Proc      CapturerToggle `yaml:"proc"`
-	} `yaml:"capturers"`
-}
-
-func defaultCapturersConfig() CapturersConfig {
-	var cfg CapturersConfig
-
-	// 기본값: 전부 켬 (원하면 기본값을 “최소만”으로 바꿔도 됨)
-	cfg.Capturers.CPU.Enabled = true
-	cfg.Capturers.Conn.Enabled = true
-	cfg.Capturers.Conn.Kind = "all"
-	cfg.Capturers.Disk.Enabled = true
-	cfg.Capturers.Disk.Paths = []string{"/"}
-
-	cfg.Capturers.FileWatch.Enabled = true
-	cfg.Capturers.FileWatch.Paths = nil // NewFileWatchCapturer() 내부 defaultWatchPaths() 쓰게
-	cfg.Capturers.FileWatch.MaxFiles = 50_000
-
-	cfg.Capturers.MEM.Enabled = true
-	cfg.Capturers.NET.Enabled = true
-	cfg.Capturers.Persist.Enabled = true
-	cfg.Capturers.Proc.Enabled = true
-
-	return cfg
-}
-
 func NewCapturersBuilder() *CapturersBuilder {
 	return &CapturersBuilder{}
 }
 
 func (cb *CapturersBuilder) Build() (Capturers, error) {
-	cfg := defaultCapturersConfig()
-
-	// YAML이 들어오면 기본값 위에 덮어쓰기
-	var raw string
-	switch {
-	case len(cb.config) > 0:
-		raw = strings.Join(cb.config, "\n")
-	case cb.configFile != "":
-		data, err := os.ReadFile(cb.configFile)
-		if err != nil {
-			return nil, fmt.Errorf("read config file %q: %w", cb.configFile, err)
-		}
-		raw = string(data)
-	}
-
-	if strings.TrimSpace(raw) != "" {
-		if err := yaml.Unmarshal([]byte(raw), &cfg); err != nil {
-			return nil, err
-		}
+	cfg, err := cb.loadConfig()
+	if err != nil {
+		return nil, err
 	}
 
 	var out Capturers
@@ -194,4 +115,36 @@ func (cb *CapturersBuilder) Build() (Capturers, error) {
 		return nil, errors.New("no capturers enabled by config")
 	}
 	return out, nil
+}
+
+func (cb *CapturersBuilder) loadConfig() (CapturersConfig, error) {
+	cfg := defaultCapturersConfig()
+
+	raw, err := cb.rawConfig()
+	if err != nil {
+		return cfg, err
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return cfg, nil
+	}
+
+	if err := yaml.Unmarshal([]byte(raw), &cfg); err != nil {
+		return cfg, fmt.Errorf("parse config: %w", err)
+	}
+	return cfg, nil
+}
+
+func (cb *CapturersBuilder) rawConfig() (string, error) {
+	switch {
+	case len(cb.config) > 0:
+		return strings.Join(cb.config, "\n"), nil
+	case cb.configFile != "":
+		data, err := os.ReadFile(cb.configFile)
+		if err != nil {
+			return "", fmt.Errorf("read config file %q: %w", cb.configFile, err)
+		}
+		return string(data), nil
+	}
+	return "", nil
 }

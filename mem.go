@@ -71,8 +71,14 @@ func (m *MEMCapturer) GetInfo() (InfoData, error) {
 	s := m.snapshot.Swap
 
 	used := v.Total - v.Available
-	usedPct := float64(used) / float64(v.Total) * 100
-	swapPct := float64(s.Used) / float64(s.Total) * 100
+	usedPct := 0.0
+	if v.Total > 0 {
+		usedPct = float64(used) / float64(v.Total) * 100
+	}
+	swapPct := 0.0
+	if s.Total > 0 {
+		swapPct = float64(s.Used) / float64(s.Total) * 100
+	}
 
 	summary := fmt.Sprintf(
 		memSnapshotText,
