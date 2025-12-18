@@ -218,7 +218,7 @@ func (d *DashboardServer) captureAndStore() {
 }
 
 func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, verbose bool, autoRefresh bool, refreshSecs int, eventRefresh bool, capInterval time.Duration) {
-	name := capturer.CapturerName(c)
+	name := displayName(c)
 
 	item := dashboardItem{Name: name}
 
@@ -235,8 +235,17 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 			if info.Meta.AgentVersion == "" {
 				info.Meta.AgentVersion = "dev"
 			}
+			if info.Meta.AgentBuild == "" && info.Meta.AgentVersion != "" {
+				info.Meta.AgentBuild = info.Meta.AgentVersion
+			}
+			if info.Meta.Capturer == "" {
+				info.Meta.Capturer = name
+			}
 			if info.Meta.CapturedAt.IsZero() {
 				info.Meta.CapturedAt = time.Now()
+			}
+			if info.Meta.Timezone == "" {
+				info.Meta.Timezone = time.Now().Format("-0700")
 			}
 			item.Info = info
 			item.Meta = info.Meta
@@ -398,7 +407,7 @@ func (d *DashboardServer) runPerCapturer(ctx context.Context, c capturer.Capture
 	eventRefresh := d.eventRefresh
 	capInterval := d.displayInterval
 	hasSnap := d.hasSnapshot
-	name := capturer.CapturerName(c)
+	name := displayName(c)
 	_, hasItem := d.items[name]
 	d.mu.RUnlock()
 
@@ -941,6 +950,12 @@ small {
       if (isNaN(sec) || sec <= 0) sec = {{.RefreshSecs}};
       input.value = sec;
 
+      if (enabled) {
+        // turning on timed refresh disables event-driven refresh
+        eventBox.checked = false;
+        applyEvent(false);
+      }
+
       localStorage.setItem(storageKeyAuto, enabled ? '1' : '0');
       localStorage.setItem(storageKeyAutoInterval, sec.toString());
 
@@ -956,11 +971,16 @@ small {
       }
     }
 
-    function applyEvent() {
-      const enabled = eventBox.checked;
+    function applyEvent(forceEnabled) {
+      const enabled = typeof forceEnabled === 'boolean' ? forceEnabled : eventBox.checked;
+      eventBox.checked = enabled;
       localStorage.setItem(storageKeyEvent, enabled ? '1' : '0');
       stopEventStream();
       if (enabled) {
+        // turning on event refresh disables timed refresh
+        autoBox.checked = false;
+        clearInterval(timer);
+        localStorage.setItem(storageKeyAuto, '0');
         es = new EventSource('/events');
         es.onmessage = refreshView;
         es.onerror = () => stopEventStream();
@@ -982,7 +1002,7 @@ small {
     }
 
     autoBox.addEventListener('change', applyAuto);
-    eventBox.addEventListener('change', applyEvent);
+    eventBox.addEventListener('change', () => applyEvent());
     input.addEventListener('change', applyAuto);
     document.getElementById('refreshBtn').onclick = refreshView;
 
@@ -1612,6 +1632,16 @@ func captureGroup2(s, pattern string) (string, string) {
 		return m[1], m[2]
 	}
 	return "", ""
+}
+
+func displayName(c capturer.Capturer) string {
+	raw := capturer.CapturerName(c)
+	trimmed := strings.TrimSuffix(raw, "Capturer")
+	upper := strings.ToUpper(trimmed)
+	if upper == "" {
+		return raw
+	}
+	return upper
 }
 
 func humanBytesString(s string) string {
