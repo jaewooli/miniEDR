@@ -9,7 +9,7 @@ import (
 )
 
 func TestAlertPipelineProcess(t *testing.T) {
-	det := &Detector{Rules: []Rule{RuleCPUHigh(80)}}
+	det := &Detector{Rules: []RuleSpec{RuleCPUHigh(80)}}
 	buf := &bytes.Buffer{}
 	resp := &ResponderPipeline{Responders: []AlertResponder{&LogResponder{Out: buf}}}
 	p := &AlertPipeline{Detector: det, Responder: resp}
@@ -31,7 +31,7 @@ func TestAlertPipelineProcess(t *testing.T) {
 }
 
 func TestAlertPipelineMissingResponder(t *testing.T) {
-	det := &Detector{Rules: []Rule{RuleCPUHigh(80)}}
+	det := &Detector{Rules: []RuleSpec{RuleCPUHigh(80)}}
 	p := &AlertPipeline{Detector: det}
 	alerts, errs := p.Process(capturer.InfoData{
 		Metrics: map[string]float64{"cpu.total_pct": 90},

@@ -21,7 +21,7 @@ func TestDetectorEnrichesAndDedups(t *testing.T) {
 		},
 	}
 	det := &Detector{
-		Rules:   []Rule{RuleCPUHigh(90)},
+		Rules:   []RuleSpec{RuleCPUHigh(90)},
 		Deduper: &AlertDeduper{Window: time.Hour},
 	}
 	alerts := det.Evaluate(info)

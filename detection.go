@@ -37,12 +37,19 @@ type Alert struct {
 	RateLimited bool                   `json:"rate_limited,omitempty"`
 }
 
-// Rule produces zero or more alerts from a single capture.
-type Rule func(info capturer.InfoData) []Alert
+// RuleSpec produces zero or more alerts from a single capture, with metadata.
+type RuleSpec struct {
+	ID          string
+	Title       string
+	Description string
+	Severity    AlertSeverity
+	Tags        []string
+	Eval        func(info capturer.InfoData) []Alert
+}
 
 // Detector runs rules, enriches alerts with meta, and applies deduplication.
 type Detector struct {
-	Rules    []Rule
+	Rules    []RuleSpec
 	Deduper  *AlertDeduper
 	Limiter  *RateLimiter
 	IDSource func() string
@@ -55,12 +62,12 @@ func (d *Detector) Evaluate(info capturer.InfoData) []Alert {
 	}
 	var out []Alert
 	for _, rule := range d.Rules {
-		if rule == nil {
+		if rule.Eval == nil {
 			continue
 		}
-		alerts := rule(info)
+		alerts := rule.Eval(info)
 		for i := range alerts {
-			out = append(out, d.enrichAlert(alerts[i], info))
+			out = append(out, d.enrichAlert(alerts[i], info, rule))
 		}
 	}
 	out = d.dedup(out)
@@ -68,9 +75,13 @@ func (d *Detector) Evaluate(info capturer.InfoData) []Alert {
 	return out
 }
 
-func (d *Detector) enrichAlert(a Alert, info capturer.InfoData) Alert {
+func (d *Detector) enrichAlert(a Alert, info capturer.InfoData, r RuleSpec) Alert {
 	if a.RuleID == "" {
-		a.RuleID = "unknown_rule"
+		if r.ID != "" {
+			a.RuleID = r.ID
+		} else {
+			a.RuleID = "unknown_rule"
+		}
 	}
 	if a.ID == "" {
 		if d.IDSource != nil {
@@ -94,10 +105,21 @@ func (d *Detector) enrichAlert(a Alert, info capturer.InfoData) Alert {
 		}
 	}
 	if a.Severity == "" {
-		a.Severity = SeverityInfo
+		if r.Severity != "" {
+			a.Severity = r.Severity
+		} else {
+			a.Severity = SeverityInfo
+		}
 	}
 	if a.Title == "" {
-		a.Title = a.RuleID
+		if r.Title != "" {
+			a.Title = r.Title
+		} else {
+			a.Title = a.RuleID
+		}
+	}
+	if a.Evidence == nil && len(r.Tags) > 0 {
+		a.Evidence = map[string]any{"tags": r.Tags}
 	}
 	if a.DedupKey == "" {
 		a.DedupKey = fmt.Sprintf("%s|%s|%s", a.RuleID, a.Source, a.Meta.Session)

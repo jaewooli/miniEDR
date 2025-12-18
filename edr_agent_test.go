@@ -145,7 +145,7 @@ func TestEDRAgentRun(t *testing.T) {
 			{Capturer: stub, Interval: 5 * time.Millisecond},
 		})
 		edrAgent.Out = buf
-		edrAgent.Detector = &miniedr.Detector{Rules: []miniedr.Rule{miniedr.RuleCPUHigh(90)}}
+		edrAgent.Detector = &miniedr.Detector{Rules: []miniedr.RuleSpec{miniedr.RuleCPUHigh(90)}}
 		logBuf := &bytes.Buffer{}
 		edrAgent.AddResponder(&miniedr.LogResponder{Out: logBuf})
 		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Millisecond)
