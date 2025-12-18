@@ -27,6 +27,7 @@ func main() {
 	dashboardAutoSec := flag.Int("dashboard-refresh-sec", 10, "dashboard auto-refresh interval seconds (default 10)")
 	dashboardEventRefresh := flag.Bool("dashboard-event-refresh", true, "refresh dashboard when captures complete (enables per-capturer intervals)")
 	dashboardCaptureSec := flag.Int("dashboard-capture-sec", 0, "dashboard capture interval seconds (0 uses per-capturer defaults)")
+	telemetryPath := flag.String("telemetry-file", "", "path to write telemetry JSON lines (rotates at ~5MB)")
 	configPath := flag.String("config", "", "path to config file (default: auto-detect config.yaml)")
 	flag.Parse()
 
@@ -64,6 +65,9 @@ func main() {
 	edrAgent := agent.NewCollectAgent(schedules)
 	edrAgent.Out = os.Stdout
 	edrAgent.Verbose = *verbose
+	if *telemetryPath != "" {
+		edrAgent.AddSink(miniedr.NewJSONFileSink(*telemetryPath, 0))
+	}
 
 	if err := edrAgent.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("agent error: %v", err)

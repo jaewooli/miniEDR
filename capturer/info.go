@@ -2,6 +2,7 @@ package capturer
 
 import (
 	"reflect"
+	"time"
 )
 
 // InfoData carries both human readable text and structured metrics to avoid downstream string parsing.
@@ -13,6 +14,18 @@ type InfoData struct {
 	Metrics map[string]float64
 	// Fields can carry non-numeric metadata if needed. Leave nil when unused.
 	Fields map[string]interface{}
+	// Meta carries standard telemetry context set by the runtime/agent.
+	Meta TelemetryMeta
+}
+
+// TelemetryMeta standardizes host/session context for all captures.
+type TelemetryMeta struct {
+	Host         string    `json:"host,omitempty"`
+	AgentVersion string    `json:"agent_version,omitempty"`
+	Session      string    `json:"session,omitempty"`
+	Timezone     string    `json:"timezone,omitempty"`
+	CapturedAt   time.Time `json:"captured_at,omitempty"`
+	MaxFiles     int       `json:"max_files,omitempty"` // optional for file change
 }
 
 // CapturerName returns the underlying type name of a capturer, used for display/logging.

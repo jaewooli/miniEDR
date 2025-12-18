@@ -37,6 +37,7 @@ type FileChangeSnapshot struct {
 	Files map[string]FileMeta
 
 	Events []FileEvent
+	Meta   TelemetryMeta
 }
 
 // FileChangeCapturer polls one or more directories/files and produces a small diff.
@@ -202,10 +203,13 @@ func (w *FileChangeCapturer) GetInfo() (InfoData, error) {
 		sample,
 	)
 	metrics := map[string]float64{
-		"file.files":  float64(len(w.curr.Files)),
-		"file.events": float64(len(w.curr.Events)),
+		"file.files":   float64(len(w.curr.Files)),
+		"file.events":  float64(len(w.curr.Events)),
+		"file.max_cap": float64(w.MaxFiles),
 	}
-	return InfoData{Summary: summary, Metrics: metrics}, nil
+	meta := w.curr.Meta
+	meta.MaxFiles = w.MaxFiles
+	return InfoData{Summary: summary, Metrics: metrics, Meta: meta}, nil
 }
 
 // GetVerboseInfo lists watch roots and recent file events.

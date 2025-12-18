@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"math"
 	"net/http"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -53,6 +54,7 @@ type dashboardItem struct {
 	Logs    []dashboardLogEntry
 	Graphs  []graphInfo
 	Display string
+	Meta    capturer.TelemetryMeta
 }
 
 type dashboardLogEntry struct {
@@ -227,7 +229,17 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 		if err != nil {
 			item.Error = fmt.Sprintf("getinfo error: %v", err)
 		} else {
+			if info.Meta.Host == "" {
+				info.Meta.Host, _ = os.Hostname()
+			}
+			if info.Meta.AgentVersion == "" {
+				info.Meta.AgentVersion = "dev"
+			}
+			if info.Meta.CapturedAt.IsZero() {
+				info.Meta.CapturedAt = time.Now()
+			}
 			item.Info = info
+			item.Meta = info.Meta
 			if verbose {
 				if vc, ok := c.(capturer.VerboseInfo); ok {
 					verb, err := vc.GetVerboseInfo()
@@ -854,11 +866,14 @@ small {
                   <circle cx="{{chartX $i $total}}" cy="17" r="5" class="{{$cls}}">
                     <title>{{$log.At}}</title>
                   </circle>
-                {{end}}
+				{{end}}
               </svg>
             </div>
             <details data-item="{{.Name}}" class="detail-box">
               <summary>Detail log (latest {{len .Logs}})</summary>
+              {{if eq .Name "FileChangeCapturer"}}
+                <div class="hint">Max files: {{.Meta.MaxFiles}}</div>
+              {{end}}
               {{range .Logs}}
               <div class="hint">{{.At}}</div>
               {{if .Error}}<div class="error">{{.Error}}</div>{{end}}

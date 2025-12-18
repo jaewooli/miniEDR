@@ -8,11 +8,11 @@ capturers:
 
   disk:
     enabled: true
-    paths: ["/home/jaeu1341/"]
+    paths: ["/home/jaeu1341/06_GO_PROJECT/"]
 
   filewatch:
     enabled: true
-    paths: ["/home/jaeu1341/"]
+    paths: ["/home/jaeu1341/06_GO_PROJECT/"]
     max_files: 100000
 
   mem:

@@ -64,7 +64,7 @@ func TestSummariesTable(t *testing.T) {
 		in   capturer.InfoData
 		want []string
 	}{
-		{"cpu full", capturer.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=10.00%, cpu0=5.0% cpu1=15.0%)"}, []string{"Avg 10.00%"}},
+		{"cpu full", capturer.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=10.00%, cpu0=5.0% cpu1=15.0%)", Metrics: map[string]float64{"cpu.core0_pct": 5, "cpu.core1_pct": 15, "cpu.total_pct": 10}}, []string{"Avg 10.00%", "cpu0=5.0%", "cpu1=15.0%"}},
 		{"cpu avg only", capturer.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=5.00%, cpu0=2.0%)"}, []string{"Avg 5.00%"}},
 		{"mem percent total", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=1024B Avail=512B UsedApprox=512B (26.49%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}, []string{"RAM 26.49%", "Total 1.0KB"}},
 		{"mem swap", capturer.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=2048B Avail=1024B UsedApprox=1024B (50.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=1024B Used=256B (25.00%) Free=0B, Sin=0B Sout=0B)"}, []string{"RAM 50.00%", "Swap 256B (25.00%)"}},

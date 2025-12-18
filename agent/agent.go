@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"sync"
 	"time"
 
 	"github.com/jaewooli/miniedr"
 	"github.com/jaewooli/miniedr/capturer"
 )
+
+const AgentVersion = "dev"
 
 // CapturerSchedule binds a capturer to a capture interval.
 type CapturerSchedule = miniedr.CapturerSchedule
@@ -22,13 +25,23 @@ type CollectAgent struct {
 	DefaultInterval time.Duration
 	Out             io.Writer
 	Verbose         bool
+
+	hostName  string
+	timezone  string
+	sessionID string
+	Sinks     []miniedr.TelemetrySink
 }
 
 func NewCollectAgent(schedules []CapturerSchedule) *CollectAgent {
+	host, _ := os.Hostname()
+	tz := time.Now().Format("-0700")
 	return &CollectAgent{
 		Schedules:       schedules,
 		DefaultInterval: 3 * time.Second,
 		Out:             os.Stdout,
+		hostName:        host,
+		timezone:        tz,
+		sessionID:       newSessionID(),
 	}
 }
 
@@ -117,6 +130,24 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer) error {
 		return err
 	}
 
+	// standardize telemetry meta
+	info.Meta.Host = a.hostName
+	info.Meta.AgentVersion = AgentVersion
+	info.Meta.Session = a.sessionID
+	info.Meta.Timezone = a.timezone
+	if info.Meta.CapturedAt.IsZero() {
+		info.Meta.CapturedAt = time.Now()
+	}
+
+	for _, sink := range a.Sinks {
+		if sink == nil {
+			continue
+		}
+		if err := sink.Consume(info); err != nil {
+			fmt.Fprintf(a.Out, "[%s] sink error: %v\n", capturer.CapturerName(c), err)
+		}
+	}
+
 	fmt.Fprintf(a.Out, "[%s] %s\n", capturer.CapturerName(c), info.Summary)
 
 	if a.Verbose {
@@ -134,4 +165,18 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer) error {
 		fmt.Fprintf(a.Out, "\n==== %s (verbose) @ %s ====\n%s\n", capturer.CapturerName(c), ts, verboseInfo)
 	}
 	return nil
+}
+
+func newSessionID() string {
+	now := time.Now().UnixNano()
+	u, _ := user.Current()
+	return fmt.Sprintf("%s-%d", u.Username, now)
+}
+
+// AddSink registers a telemetry sink to receive captured InfoData.
+func (a *CollectAgent) AddSink(s miniedr.TelemetrySink) {
+	if s == nil {
+		return
+	}
+	a.Sinks = append(a.Sinks, s)
 }
