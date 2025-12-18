@@ -1,6 +1,7 @@
 package miniedr_test
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -51,6 +52,40 @@ func TestFileWatchCapturer(t *testing.T) {
 	got, err = w.GetInfo()
 	assertError(t, err, "")
 	assertEqual(t, got.Summary, "FileWatchSnapshot(at=1970-01-01T09:00:20+09:00, files=1, events=2, sample=created:new.txt(+1))")
+
+	t.Run("error when paths empty", func(t *testing.T) {
+		fw := &miniedr.FileWatchCapturer{Paths: nil, WalkFn: filepath.WalkDir}
+		err := fw.Capture()
+		assertError(t, err, "filewatch capturer: Paths is empty")
+	})
+
+	t.Run("respects max files cutoff", func(t *testing.T) {
+		dir3 := t.TempDir()
+		for i := 0; i < 5; i++ {
+			_ = os.WriteFile(filepath.Join(dir3, fmt.Sprintf("f%d.txt", i)), []byte("x"), 0o644)
+		}
+		scanned := 0
+		fw := &miniedr.FileWatchCapturer{
+			Paths:    []string{dir3},
+			MaxFiles: 2,
+			WalkFn: func(root string, fn fs.WalkDirFunc) error {
+				return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+					if err != nil {
+						return nil
+					}
+					if d.IsDir() {
+						return nil
+					}
+					scanned++
+					return fn(path, d, err)
+				})
+			},
+		}
+		_ = fw.Capture()
+		if scanned < fw.MaxFiles {
+			t.Fatalf("expected scan to stop after hitting max files; scanned=%d", scanned)
+		}
+	})
 
 	t.Run("single event sample without suffix", func(t *testing.T) {
 		dir2 := t.TempDir()

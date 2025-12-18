@@ -23,6 +23,24 @@ func TestNETCapturer(t *testing.T) {
 		assertError(t, err, "net capturer: IOFn is nil")
 	})
 
+	t.Run("handles interface reset (counters shrink) as zero delta", func(t *testing.T) {
+		n3 := &miniedr.NETCapturer{
+			Now: func() time.Time { return time.Unix(0, 0) },
+			IOFn: func(pernic bool) ([]gnet.IOCountersStat, error) {
+				return []gnet.IOCountersStat{{Name: "eth0", BytesRecv: 100, BytesSent: 100}}, nil
+			},
+		}
+		_ = n3.Capture()
+		n3.Now = func() time.Time { return time.Unix(5, 0) }
+		n3.IOFn = func(pernic bool) ([]gnet.IOCountersStat, error) {
+			return []gnet.IOCountersStat{{Name: "eth0", BytesRecv: 10, BytesSent: 20}}, nil
+		}
+		_ = n3.Capture()
+		info, _ := n3.GetInfo()
+		assertContains(t, info.Summary, "rxRate=0B/s")
+		assertContains(t, info.Summary, "txRate=0B/s")
+	})
+
 	nowCalls := 0
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(15, 0)}
 	n.Now = func() time.Time {

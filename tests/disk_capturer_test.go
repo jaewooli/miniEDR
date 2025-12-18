@@ -26,6 +26,16 @@ func TestDISKCapturer(t *testing.T) {
 		assertError(t, err, "disk capturer: UsageFn is nil")
 	})
 
+	t.Run("error when IOCountersFn nil", func(t *testing.T) {
+		d3 := &miniedr.DISKCapturer{
+			Paths:   []string{"/"},
+			UsageFn: func(path string) (*disk.UsageStat, error) { return &disk.UsageStat{Total: 1, Used: 1}, nil },
+		}
+		d3.IOCountersFn = nil
+		err := d3.Capture()
+		assertError(t, err, "disk capturer: IOCountersFn is nil")
+	})
+
 	nowCalls := 0
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0)}
 	d.Now = func() time.Time {

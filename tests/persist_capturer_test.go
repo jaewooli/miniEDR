@@ -55,6 +55,15 @@ func TestPersistCapturer(t *testing.T) {
 		err := p2.Capture()
 		assertError(t, err, "persist capturer: Sources is empty")
 	})
+
+	t.Run("ignores nil source and bubbles source error", func(t *testing.T) {
+		errSrc := &errPersistSource{}
+		p3 := &miniedr.PersistCapturer{
+			Sources: []miniedr.PersistSource{nil, errSrc},
+		}
+		err := p3.Capture()
+		assertContains(t, err.Error(), "persist source \"err\" snapshot")
+	})
 }
 
 func TestPersistCapturerVerbose(t *testing.T) {

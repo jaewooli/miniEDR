@@ -1,6 +1,7 @@
 package miniedr_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -62,4 +63,23 @@ func TestProcCapturerVerbose(t *testing.T) {
 		"Dead:\n" +
 		"- pid=1 name=proc1 exe=/bin/proc1 cmd=cmd1"
 	assertEqual(t, got, want)
+}
+
+func TestProcGetterErrorsStillCapture(t *testing.T) {
+	c := &miniedr.ProcCapturer{
+		Now: func() time.Time { return time.Unix(0, 0) },
+		ProcessesFn: func() ([]*process.Process, error) {
+			return []*process.Process{{Pid: 1}}, nil
+		},
+		NameFn:       func(p *process.Process) (string, error) { return "", errors.New("boom") },
+		ExeFn:        func(p *process.Process) (string, error) { return "", errors.New("boom") },
+		CmdlineFn:    func(p *process.Process) (string, error) { return "", errors.New("boom") },
+		PPIDFn:       func(p *process.Process) (int32, error) { return 0, errors.New("boom") },
+		CreateTimeFn: func(p *process.Process) (int64, error) { return 0, errors.New("boom") },
+	}
+	if err := c.Capture(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	info, _ := c.GetInfo()
+	assertContains(t, info.Summary, "procs=1")
 }

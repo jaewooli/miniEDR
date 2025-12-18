@@ -34,6 +34,13 @@ func (s *stubPersistSource) Snapshot() (map[string]string, error) {
 	return out, nil
 }
 
+type errPersistSource struct{}
+
+func (e *errPersistSource) Name() string { return "err" }
+func (e *errPersistSource) Snapshot() (map[string]string, error) {
+	return nil, fmt.Errorf("snap fail")
+}
+
 func assertCapturers(t *testing.T, got, want miniedr.Capturers) {
 	t.Helper()
 	for i, capturer := range got {

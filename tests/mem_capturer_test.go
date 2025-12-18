@@ -109,6 +109,24 @@ func TestMemSnapShot(t *testing.T) {
 		err := m2.Capture()
 		assertError(t, err, "mem capturer: VirtualFn is nil")
 	})
+
+	t.Run("zero totals avoid NaN", func(t *testing.T) {
+		m3 := &miniedr.MEMCapturer{
+			Now: func() time.Time { return time.Unix(0, 0) },
+			VirtualFn: func() (*mem.VirtualMemoryStat, error) {
+				return &mem.VirtualMemoryStat{Total: 0, Available: 0}, nil
+			},
+			SwapFn: func() (*mem.SwapMemoryStat, error) {
+				return &mem.SwapMemoryStat{Total: 0, Used: 0}, nil
+			},
+		}
+		assertError(t, m3.Capture(), "")
+		info, _ := m3.GetInfo()
+		assertContains(t, info.Summary, "(0.00%)")
+		if info.Metrics["mem.ram.used_pct"] != 0 || info.Metrics["mem.swap.used_pct"] != 0 {
+			t.Fatalf("expected zero percentages, got %+v", info.Metrics)
+		}
+	})
 }
 
 func TestMemSnapshotVerbose(t *testing.T) {

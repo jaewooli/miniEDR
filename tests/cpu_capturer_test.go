@@ -74,6 +74,31 @@ func TestCPUCapturer(t *testing.T) {
 	got, err = c.GetInfo()
 	assertError(t, err, "")
 	assertEqual(t, got.Summary, "CPUSnapshot(at=1970-01-01T09:00:20+09:00, totalUsage=85.71%, cpu0=75.0% cpu1=50.0%)")
+
+	t.Run("counters decrease yields n/a and no metrics", func(t *testing.T) {
+		c2 := &miniedr.CPUCapturer{
+			Now: func() time.Time { return time.Unix(0, 0) },
+			TimesFn: func(percpu bool) ([]cpu.TimesStat, error) {
+				if percpu {
+					return []cpu.TimesStat{{User: 10, System: 5, Idle: 20}}, nil
+				}
+				return []cpu.TimesStat{{User: 10, System: 5, Idle: 20}}, nil
+			},
+		}
+		_ = c2.Capture()
+		c2.TimesFn = func(percpu bool) ([]cpu.TimesStat, error) {
+			if percpu {
+				return []cpu.TimesStat{{User: 1, System: 1, Idle: 1}}, nil
+			}
+			return []cpu.TimesStat{{User: 1, System: 1, Idle: 1}}, nil
+		}
+		_ = c2.Capture()
+		info, _ := c2.GetInfo()
+		assertContains(t, info.Summary, "totalUsage=n/a")
+		if len(info.Metrics) != 0 {
+			t.Fatalf("expected empty metrics when counters decrease, got %+v", info.Metrics)
+		}
+	})
 }
 
 func TestCPUCapturerVerbose(t *testing.T) {
