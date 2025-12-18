@@ -1438,10 +1438,11 @@ func summarizeInfo(name string, info capturer.InfoData) string {
 		} else if avg := captureGroup(summary, `totalUsage=([\d\.]+)%`); avg != "" {
 			parts = append(parts, fmt.Sprintf("Avg %s%%", avg))
 		}
-		if core0, ok := metricVal(m, "cpu.core0_pct"); ok {
-			parts = append(parts, fmt.Sprintf("cpu0=%.1f%%", core0))
-		} else if cores := captureGroup(summary, `(cpu0=[\d\.% ]+)`); cores != "" {
-			parts = append(parts, cores)
+		// Show up to 4 cores from metrics
+		for i := 0; i < 4; i++ {
+			if core, ok := metricVal(m, fmt.Sprintf("cpu.core%d_pct", i)); ok {
+				parts = append(parts, fmt.Sprintf("cpu%d=%.1f%%", i, core))
+			}
 		}
 		if len(parts) == 0 {
 			return summary
@@ -1504,6 +1505,76 @@ func summarizeInfo(name string, info capturer.InfoData) string {
 			parts = append(parts, fmt.Sprintf("TX %s/s", humanBytes(tx)))
 		} else if tx := captureGroup(summary, `txRate=([^\)]+)`); tx != "" {
 			parts = append(parts, "TX "+tx)
+		}
+		if len(parts) == 0 {
+			return summary
+		}
+		return strings.Join(parts, " · ")
+	case strings.Contains(up, "FILECHANGE"):
+		var parts []string
+		if ev, ok := metricVal(m, "file.events"); ok {
+			parts = append(parts, fmt.Sprintf("Events %d", int(ev)))
+		} else if ev := captureGroup(summary, `events=([\d]+)`); ev != "" {
+			parts = append(parts, "Events "+ev)
+		}
+		if files, ok := metricVal(m, "file.files"); ok {
+			parts = append(parts, fmt.Sprintf("Files %d", int(files)))
+		} else if files := captureGroup(summary, `files=([\d]+)`); files != "" {
+			parts = append(parts, "Files "+files)
+		}
+		if len(parts) == 0 {
+			return summary
+		}
+		return strings.Join(parts, " · ")
+	case strings.Contains(up, "CONN"):
+		total := metricInt(m, "conn.total")
+		newCnt := metricInt(m, "conn.new")
+		deadCnt := metricInt(m, "conn.dead")
+		var parts []string
+		if total >= 0 {
+			parts = append(parts, fmt.Sprintf("Conns %d", total))
+		}
+		if newCnt >= 0 {
+			parts = append(parts, fmt.Sprintf("New %d", newCnt))
+		}
+		if deadCnt >= 0 {
+			parts = append(parts, fmt.Sprintf("Closed %d", deadCnt))
+		}
+		if len(parts) == 0 {
+			return summary
+		}
+		return strings.Join(parts, " · ")
+	case strings.Contains(up, "PROC"):
+		total := metricInt(m, "proc.total")
+		newCnt := metricInt(m, "proc.new")
+		deadCnt := metricInt(m, "proc.dead")
+		var parts []string
+		if total >= 0 {
+			parts = append(parts, fmt.Sprintf("Procs %d", total))
+		}
+		if newCnt >= 0 {
+			parts = append(parts, fmt.Sprintf("New %d", newCnt))
+		}
+		if deadCnt >= 0 {
+			parts = append(parts, fmt.Sprintf("Dead %d", deadCnt))
+		}
+		if len(parts) == 0 {
+			return summary
+		}
+		return strings.Join(parts, " · ")
+	case strings.Contains(up, "PERSIST"):
+		added := metricInt(m, "persist.added")
+		changed := metricInt(m, "persist.changed")
+		removed := metricInt(m, "persist.removed")
+		var parts []string
+		if added >= 0 {
+			parts = append(parts, fmt.Sprintf("Added %d", added))
+		}
+		if changed >= 0 {
+			parts = append(parts, fmt.Sprintf("Changed %d", changed))
+		}
+		if removed >= 0 {
+			parts = append(parts, fmt.Sprintf("Removed %d", removed))
 		}
 		if len(parts) == 0 {
 			return summary
