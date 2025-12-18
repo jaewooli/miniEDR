@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"math"
 	"net/http"
 	"regexp"
 	"sort"
@@ -39,6 +40,7 @@ type DashboardServer struct {
 	items         map[string]dashboardItem
 	itemIntervals map[string]time.Duration
 	netScales     map[string]float64
+	countScales   map[string]map[string]float64 // item -> label -> scale
 }
 
 type dashboardItem struct {
@@ -237,7 +239,8 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 				}
 			}
 			netScale := d.updateNetScale(name, item.Info)
-			item.Graphs = append(item.Graphs, deriveGraphs(name, item.Info, netScale)...)
+			countScale := func(label string, val float64) float64 { return d.updateCountScale(name, label, val) }
+			item.Graphs = append(item.Graphs, deriveGraphs(name, item.Info, netScale, countScale)...)
 			item.Display = summarizeInfo(name, item.Info)
 		}
 	}
@@ -558,6 +561,7 @@ button:hover {
   gap: 10px;
   height: 100%;
   box-sizing: border-box;
+  min-width: 0;
 }
 .card h2 {
   margin: 0;
@@ -717,6 +721,7 @@ pre {
   color: #cbd5e1;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, Menlo, monospace;
   font-size: 13px;
 }
@@ -737,6 +742,8 @@ small {
   font-weight: 600;
   margin-top: 4px;
   white-space: pre-wrap;
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .detail-box {
   max-height: 260px;
@@ -1055,7 +1062,7 @@ func (d *DashboardServer) updateNetScale(name string, info capturer.InfoData) fl
 		scale = autoNetScale(total)
 	}
 	if total > scale {
-		scale = total * 1.2
+		scale = total
 	}
 	// Decay scale when traffic is much lower to keep gauge responsive.
 	if total < scale/3 {
@@ -1065,6 +1072,37 @@ func (d *DashboardServer) updateNetScale(name string, info capturer.InfoData) fl
 		}
 	}
 	d.netScales[name] = scale
+	return scale
+}
+
+func (d *DashboardServer) updateCountScale(itemName, label string, val float64) float64 {
+	if val < 0 {
+		return 0
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.countScales == nil {
+		d.countScales = make(map[string]map[string]float64)
+	}
+	lmap := d.countScales[itemName]
+	if lmap == nil {
+		lmap = make(map[string]float64)
+		d.countScales[itemName] = lmap
+	}
+	scale := lmap[label]
+	if scale <= 0 {
+		scale = autoCountScale(val)
+	}
+	if val > scale {
+		scale = val * 1.2
+	}
+	if val < scale/3 {
+		scale = scale * 0.7
+		if scale < 10 {
+			scale = 10
+		}
+	}
+	lmap[label] = scale
 	return scale
 }
 
@@ -1084,14 +1122,24 @@ func chartX(idx, total int) int {
 	if total <= 1 {
 		return 0
 	}
-	span := 220
-	step := span / (total - 1)
-	return idx * step
+	span := 220.0
+	step := span / float64(total-1)
+	x := math.Round(step * float64(idx))
+	if x < 0 {
+		x = 0
+	}
+	if x > span {
+		x = span
+	}
+	return int(x)
 }
 
-func deriveGraphs(name string, info capturer.InfoData, netScale float64) []graphInfo {
+func deriveGraphs(name string, info capturer.InfoData, netScale float64, countScale func(label string, val float64) float64) []graphInfo {
 	up := strings.ToUpper(name)
 	var gs []graphInfo
+	if countScale == nil {
+		countScale = func(_ string, _ float64) float64 { return 0 }
+	}
 	switch {
 	case strings.Contains(up, "MEM"):
 		if pct, ok := metricVal(info.Metrics, "mem.ram.used_pct"); ok {
@@ -1160,13 +1208,16 @@ func deriveGraphs(name string, info capturer.InfoData, netScale float64) []graph
 			deadCnt, _ = extractInt(info.Summary, `dead=([\d]+)`)
 		}
 		if total >= 0 {
-			gs = append(gs, countGauge("Conns", total))
+			scale := countScale("Conns", float64(total))
+			gs = append(gs, countGauge("Conns", total, scale))
 		}
 		if newCnt >= 0 {
-			gs = append(gs, countGauge("New conns", newCnt))
+			scale := countScale("New conns", float64(newCnt))
+			gs = append(gs, countGauge("New conns", newCnt, scale))
 		}
 		if deadCnt >= 0 {
-			gs = append(gs, countGauge("Closed", deadCnt))
+			scale := countScale("Closed", float64(deadCnt))
+			gs = append(gs, countGauge("Closed", deadCnt, scale))
 		}
 	case strings.Contains(up, "FILECHANGE"):
 		v := metricInt(info.Metrics, "file.events")
@@ -1176,7 +1227,8 @@ func deriveGraphs(name string, info capturer.InfoData, netScale float64) []graph
 			}
 		}
 		if v >= 0 {
-			gs = append(gs, countGauge("File events", v))
+			scale := countScale("File events", float64(v))
+			gs = append(gs, countGauge("File events", v, scale))
 		}
 	case strings.Contains(up, "PROC"):
 		total := metricInt(info.Metrics, "proc.total")
@@ -1192,13 +1244,16 @@ func deriveGraphs(name string, info capturer.InfoData, netScale float64) []graph
 			deadCnt, _ = extractInt(info.Summary, `dead=([\d]+)`)
 		}
 		if total >= 0 {
-			gs = append(gs, countGauge("Procs", total))
+			scale := countScale("Procs", float64(total))
+			gs = append(gs, countGauge("Procs", total, scale))
 		}
 		if newCnt >= 0 {
-			gs = append(gs, countGauge("New procs", newCnt))
+			scale := countScale("New procs", float64(newCnt))
+			gs = append(gs, countGauge("New procs", newCnt, scale))
 		}
 		if deadCnt >= 0 {
-			gs = append(gs, countGauge("Dead procs", deadCnt))
+			scale := countScale("Dead procs", float64(deadCnt))
+			gs = append(gs, countGauge("Dead procs", deadCnt, scale))
 		}
 	case strings.Contains(up, "PERSIST"):
 		added := metricInt(info.Metrics, "persist.added")
@@ -1220,13 +1275,16 @@ func deriveGraphs(name string, info capturer.InfoData, netScale float64) []graph
 			}
 		}
 		if added >= 0 {
-			gs = append(gs, countGauge("Added", added))
+			scale := countScale("Added", float64(added))
+			gs = append(gs, countGauge("Added", added, scale))
 		}
 		if changed >= 0 {
-			gs = append(gs, countGauge("Changed", changed))
+			scale := countScale("Changed", float64(changed))
+			gs = append(gs, countGauge("Changed", changed, scale))
 		}
 		if removed >= 0 {
-			gs = append(gs, countGauge("Removed", removed))
+			scale := countScale("Removed", float64(removed))
+			gs = append(gs, countGauge("Removed", removed, scale))
 		}
 	}
 	return gs
@@ -1264,13 +1322,21 @@ func extractInt(s, pattern string) (int, bool) {
 	return v, true
 }
 
-func countGauge(label string, val int) graphInfo {
+func countGauge(label string, val int, scale float64) graphInfo {
 	v := float64(val)
+	if scale <= 0 {
+		scale = autoCountScale(v)
+	}
+	pct := 0.0
+	if scale > 0 {
+		pct = (v / scale) * 100
+	}
 	return graphInfo{
 		Label:     label,
 		Value:     v,
-		Display:   clampGraphValue(v),
+		Display:   clampGraphValue(pct),
 		ValueText: formatCount(val),
+		MaxHint:   fmt.Sprintf("max=%s", formatCount(int(scale))),
 	}
 }
 
@@ -1282,6 +1348,36 @@ func formatCount(v int) string {
 		return fmt.Sprintf("%.1fk", float64(v)/1_000)
 	default:
 		return fmt.Sprintf("%d", v)
+	}
+}
+
+func autoCountScale(v float64) float64 {
+	switch {
+	case v >= 100_000:
+		return 120_000
+	case v >= 50_000:
+		return 60_000
+	case v >= 10_000:
+		return 12_000
+	case v >= 5_000:
+		return 6_000
+	case v >= 1_000:
+		return 1_200
+	case v >= 500:
+		return 700
+	case v >= 200:
+		return 250
+	case v >= 100:
+		return 120
+	case v >= 50:
+		return 70
+	case v >= 10:
+		return 15
+	default:
+		if v <= 0 {
+			return 10
+		}
+		return math.Max(v*2, 10)
 	}
 }
 
