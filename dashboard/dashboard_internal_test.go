@@ -22,6 +22,9 @@ func TestDeriveGraphVariants(t *testing.T) {
 		{"net rate", deriveGraphs("NETCapturer", capturer.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=1048576B/s, txRate=1048576B/s)"}), func(g []graphInfo) bool { return len(g) == 1 && strings.HasPrefix(g[0].Label, "NET") && g[0].Value > 0 }},
 		{"net zero", deriveGraphs("NETCapturer", capturer.InfoData{Summary: "NETSnapshot(at=..., ifaces=2, rxRate=0B/s, txRate=0B/s)"}), func(g []graphInfo) bool { return len(g) == 1 && strings.HasPrefix(g[0].Label, "NET") }},
 		{"unknown capturer", deriveGraphs("FooCapturer", capturer.InfoData{Summary: "random text"}), func(g []graphInfo) bool { return len(g) == 0 }},
+		{"file change events", deriveGraphs("FileChangeCapturer", capturer.InfoData{Summary: "FileChangeSnapshot(at=..., files=3, events=5, sample=created:a.txt)"}), func(g []graphInfo) bool {
+			return len(g) == 1 && g[0].Label == "File events" && g[0].Value == 5
+		}},
 	}
 
 	for _, tt := range cases {

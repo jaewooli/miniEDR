@@ -1103,7 +1103,7 @@ func deriveGraphs(name string, info capturer.InfoData) []graphInfo {
 		if deadCnt >= 0 {
 			gs = append(gs, countGauge("Closed", deadCnt))
 		}
-	case strings.Contains(up, "FILEWATCH"):
+	case strings.Contains(up, "FILECHANGE"):
 		v := metricInt(info.Metrics, "file.events")
 		if v == -1 {
 			if parsed, ok := extractInt(info.Summary, `events=([\d]+)`); ok {
