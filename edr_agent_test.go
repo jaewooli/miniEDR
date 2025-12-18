@@ -40,9 +40,11 @@ func (s *stubEDRCapturer) GetInfo() (capturer.InfoData, error) {
 type stubSink struct {
 	errs     []error
 	consumed int
+	last     capturer.InfoData
 }
 
-func (s *stubSink) Consume(_ capturer.InfoData) error {
+func (s *stubSink) Consume(info capturer.InfoData) error {
+	s.last = info
 	s.consumed++
 	if len(s.errs) == 0 {
 		return nil
@@ -159,6 +161,32 @@ func TestEDRAgentRun(t *testing.T) {
 			t.Fatalf("expected last error cleared after success, got %v", ss.LastErr)
 		}
 		assertTrue(t, sink.consumed >= 2)
+	})
+
+	t.Run("fills telemetry meta", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		stub := &stubEDRCapturer{info: capturer.InfoData{Summary: "ok"}}
+		sink := &stubSink{}
+		edrAgent := agent.NewCollectAgent([]miniedr.CapturerSchedule{
+			{Capturer: stub, Interval: 10 * time.Millisecond},
+		})
+		edrAgent.Out = buf
+		edrAgent.AddSink(sink)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
+		defer cancel()
+
+		_ = edrAgent.Run(ctx)
+
+		meta := sink.last.Meta
+		if meta.Host == "" || meta.Session == "" || meta.AgentVersion == "" || meta.Capturer == "" {
+			t.Fatalf("meta not populated: %+v", meta)
+		}
+		if meta.IntervalSec == 0 {
+			t.Fatalf("expected interval meta set, got %+v", meta)
+		}
+		if meta.OS == "" || meta.Arch == "" {
+			t.Fatalf("expected os/arch set, got %+v", meta)
+		}
 	})
 
 	t.Run("returns capture error immediately", func(t *testing.T) {

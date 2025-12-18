@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/user"
 	"reflect"
+	"runtime"
 	"sync"
 	"time"
 
@@ -97,7 +98,7 @@ func (a *CollectAgent) runSchedule(ctx context.Context, sc CapturerSchedule) {
 		interval = 5 * time.Second
 	}
 
-	if err := a.captureOnce(sc.Capturer); err != nil {
+	if err := a.captureOnce(sc.Capturer, interval); err != nil {
 		a.recordErr(err)
 	}
 
@@ -109,14 +110,14 @@ func (a *CollectAgent) runSchedule(ctx context.Context, sc CapturerSchedule) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := a.captureOnce(sc.Capturer); err != nil {
+			if err := a.captureOnce(sc.Capturer, interval); err != nil {
 				a.recordErr(err)
 			}
 		}
 	}
 }
 
-func (a *CollectAgent) captureOnce(c capturer.Capturer) error {
+func (a *CollectAgent) captureOnce(c capturer.Capturer, interval time.Duration) error {
 	if err := c.Capture(); err != nil {
 		fmt.Fprintf(a.Out, "[%s] capture error: %v\n", capturer.CapturerName(c), err)
 		return err
@@ -129,10 +130,17 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer) error {
 	}
 
 	// standardize telemetry meta
-	info.Meta.Host = a.hostName
-	info.Meta.AgentVersion = AgentVersion
-	info.Meta.Session = a.sessionID
-	info.Meta.Timezone = a.timezone
+	info.Meta.Host = firstNonEmpty(info.Meta.Host, a.hostName)
+	info.Meta.AgentVersion = firstNonEmpty(info.Meta.AgentVersion, AgentVersion)
+	info.Meta.AgentBuild = firstNonEmpty(info.Meta.AgentBuild, AgentVersion)
+	info.Meta.Session = firstNonEmpty(info.Meta.Session, a.sessionID)
+	info.Meta.Timezone = firstNonEmpty(info.Meta.Timezone, a.timezone)
+	info.Meta.OS = firstNonEmpty(info.Meta.OS, runtime.GOOS)
+	info.Meta.Arch = firstNonEmpty(info.Meta.Arch, runtime.GOARCH)
+	info.Meta.Capturer = firstNonEmpty(info.Meta.Capturer, capturer.CapturerName(c))
+	if info.Meta.IntervalSec == 0 && interval > 0 {
+		info.Meta.IntervalSec = interval.Seconds()
+	}
 	if info.Meta.CapturedAt.IsZero() {
 		info.Meta.CapturedAt = time.Now()
 	}
@@ -246,4 +254,11 @@ func sinkName(s miniedr.TelemetrySink) string {
 		t = t.Elem()
 	}
 	return t.Name()
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }

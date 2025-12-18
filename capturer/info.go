@@ -22,9 +22,14 @@ type InfoData struct {
 type TelemetryMeta struct {
 	Host         string    `json:"host,omitempty"`
 	AgentVersion string    `json:"agent_version,omitempty"`
+	AgentBuild   string    `json:"agent_build,omitempty"`
 	Session      string    `json:"session,omitempty"`
 	Timezone     string    `json:"timezone,omitempty"`
 	CapturedAt   time.Time `json:"captured_at,omitempty"`
+	OS           string    `json:"os,omitempty"`
+	Arch         string    `json:"arch,omitempty"`
+	Capturer     string    `json:"capturer,omitempty"`
+	IntervalSec  float64   `json:"interval_sec,omitempty"`
 	MaxFiles     int       `json:"max_files,omitempty"` // optional for file change
 }
 
