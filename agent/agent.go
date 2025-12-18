@@ -30,6 +30,8 @@ type CollectAgent struct {
 	timezone  string
 	sessionID string
 	Sinks     []miniedr.TelemetrySink
+
+	Errs []error
 }
 
 func NewCollectAgent(schedules []CapturerSchedule) *CollectAgent {
@@ -50,6 +52,11 @@ func (a *CollectAgent) Run(ctx context.Context) error {
 	if len(a.Schedules) == 0 {
 		return errors.New("edr agent: schedules is empty")
 	}
+	for i, sc := range a.Schedules {
+		if sc.Capturer == nil {
+			return fmt.Errorf("edr agent: schedule %d capturer is nil", i)
+		}
+	}
 	if a.Out == nil {
 		a.Out = io.Discard
 	}
@@ -60,37 +67,21 @@ func (a *CollectAgent) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errCh := make(chan error, len(a.Schedules))
 	var wg sync.WaitGroup
-
 	for _, sc := range a.Schedules {
 		wg.Add(1)
 		go func(sc CapturerSchedule) {
 			defer wg.Done()
-			if err := a.runSchedule(ctx, sc); err != nil {
-				errCh <- err
-				cancel()
-			}
+			a.runSchedule(ctx, sc)
 		}(sc)
 	}
 
-	go func() {
-		wg.Wait()
-		close(errCh)
-	}()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-errCh:
-		return err
-	}
+	<-ctx.Done()
+	wg.Wait()
+	return a.firstErrorOr(ctx.Err())
 }
 
-func (a *CollectAgent) runSchedule(ctx context.Context, sc CapturerSchedule) error {
-	if sc.Capturer == nil {
-		return errors.New("edr agent: capturer is nil")
-	}
+func (a *CollectAgent) runSchedule(ctx context.Context, sc CapturerSchedule) {
 	interval := sc.Interval
 	if interval <= 0 {
 		interval = a.DefaultInterval
@@ -100,7 +91,7 @@ func (a *CollectAgent) runSchedule(ctx context.Context, sc CapturerSchedule) err
 	}
 
 	if err := a.captureOnce(sc.Capturer); err != nil {
-		return err
+		a.recordErr(err)
 	}
 
 	ticker := time.NewTicker(interval)
@@ -109,10 +100,10 @@ func (a *CollectAgent) runSchedule(ctx context.Context, sc CapturerSchedule) err
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return
 		case <-ticker.C:
 			if err := a.captureOnce(sc.Capturer); err != nil {
-				return err
+				a.recordErr(err)
 			}
 		}
 	}
@@ -179,4 +170,18 @@ func (a *CollectAgent) AddSink(s miniedr.TelemetrySink) {
 		return
 	}
 	a.Sinks = append(a.Sinks, s)
+}
+
+func (a *CollectAgent) recordErr(err error) {
+	if err == nil {
+		return
+	}
+	a.Errs = append(a.Errs, err)
+}
+
+func (a *CollectAgent) firstErrorOr(fallback error) error {
+	if len(a.Errs) > 0 {
+		return a.Errs[0]
+	}
+	return fallback
 }

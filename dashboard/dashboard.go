@@ -1096,29 +1096,25 @@ func (d *DashboardServer) updateCountScale(itemName, label string, val float64) 
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.countScales == nil {
-		d.countScales = make(map[string]map[string]float64)
-	}
-	lmap := d.countScales[itemName]
-	if lmap == nil {
-		lmap = make(map[string]float64)
-		d.countScales[itemName] = lmap
-	}
-	scale := lmap[label]
-	if scale <= 0 {
-		scale = autoCountScale(val)
-	}
-	if val > scale {
-		scale = val * 1.2
-	}
-	if val < scale/3 {
-		scale = scale * 0.7
-		if scale < 10 {
-			scale = 10
+	{
+		if d.countScales == nil {
+			d.countScales = make(map[string]map[string]float64)
 		}
+		lmap := d.countScales[itemName]
+		if lmap == nil {
+			lmap = make(map[string]float64)
+			d.countScales[itemName] = lmap
+		}
+		scale := lmap[label]
+		if scale <= 0 {
+			scale = autoCountScale(val)
+		}
+		if val > scale {
+			scale = val
+		}
+		lmap[label] = scale
+		return scale
 	}
-	lmap[label] = scale
-	return scale
 }
 
 func extractRatesMetrics(info capturer.InfoData) (float64, float64, bool) {
@@ -1392,7 +1388,7 @@ func autoCountScale(v float64) float64 {
 		if v <= 0 {
 			return 10
 		}
-		return math.Max(v*2, 10)
+		return math.Max(v, 10)
 	}
 }
 
