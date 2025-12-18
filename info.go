@@ -15,8 +15,8 @@ type InfoData struct {
 	Fields map[string]interface{}
 }
 
-// typeName returns the underlying type name of a capturer, used for display/logging.
-func typeName(c Capturer) string {
+// CapturerName returns the underlying type name of a capturer, used for display/logging.
+func CapturerName(c Capturer) string {
 	t := reflect.TypeOf(c)
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()

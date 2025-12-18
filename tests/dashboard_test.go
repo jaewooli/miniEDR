@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/dashboard"
 )
 
 type dashStub struct {
@@ -62,7 +63,7 @@ func TestDashboardSnapshotAndRender(t *testing.T) {
 		&dashStub{name: "CPUCapturer", info: miniedr.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=1.1%)"}, verbose: "cpu verbose"},
 		&dashStub{name: "MEMCapturer", info: miniedr.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=0B Avail=0B UsedApprox=0B (0.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}, verbose: "mem verbose"},
 	}
-	ds := miniedr.NewDashboardServer(cs, "TestDash", true)
+	ds := dashboard.NewDashboardServer(cs, "TestDash", true)
 
 	now := time.Unix(100, 0)
 	ds.SetNowFunc(func() time.Time { return now })
@@ -86,7 +87,7 @@ func TestDashboardSnapshotAndRender(t *testing.T) {
 
 func TestDashboardChangedFlag(t *testing.T) {
 	changing := &changingStub{name: "cpu", infos: []string{"cpu info v1", "cpu info v2"}, idx: -1}
-	ds := miniedr.NewDashboardServer(miniedr.Capturers{changing}, "TestDash", false)
+	ds := dashboard.NewDashboardServer(miniedr.Capturers{changing}, "TestDash", false)
 	ds.SetNowFunc(func() time.Time { return time.Unix(100, 0) })
 
 	ds.CaptureNow()
@@ -112,7 +113,7 @@ func TestDashboardChangedIgnoresTimestamps(t *testing.T) {
 		"CPUSnapshot(at=1970-01-01T00:00:10Z, totalUsage=10%)",
 		"CPUSnapshot(at=1970-01-01T00:00:20Z, totalUsage=10%)",
 	}}
-	ds := miniedr.NewDashboardServer(miniedr.Capturers{changing}, "TestDash", false)
+	ds := dashboard.NewDashboardServer(miniedr.Capturers{changing}, "TestDash", false)
 	ds.SetNowFunc(func() time.Time { return time.Unix(100, 0) })
 
 	ds.CaptureNow()
@@ -145,7 +146,7 @@ func readBody(t *testing.T, res *http.Response) string {
 }
 
 func TestDashboardEventStream(t *testing.T) {
-	ds := miniedr.NewDashboardServer(miniedr.Capturers{
+	ds := dashboard.NewDashboardServer(miniedr.Capturers{
 		&dashStub{name: "cpu", info: miniedr.InfoData{Summary: "cpu info"}},
 	}, "TestDash", false)
 	ds.SetNowFunc(func() time.Time { return time.Unix(200, 0) })

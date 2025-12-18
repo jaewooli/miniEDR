@@ -1,4 +1,4 @@
-package miniedr
+package agent
 
 import (
 	"context"
@@ -8,13 +8,12 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/jaewooli/miniedr"
 )
 
 // CapturerSchedule binds a capturer to a capture interval.
-type CapturerSchedule struct {
-	Capturer Capturer
-	Interval time.Duration
-}
+type CapturerSchedule = miniedr.CapturerSchedule
 
 // EDRAgent runs captures per schedule (different intervals per capturer).
 type EDRAgent struct {
@@ -105,64 +104,33 @@ func (a *EDRAgent) runSchedule(ctx context.Context, sc CapturerSchedule) error {
 	}
 }
 
-func (a *EDRAgent) captureOnce(c Capturer) error {
+func (a *EDRAgent) captureOnce(c miniedr.Capturer) error {
 	if err := c.Capture(); err != nil {
-		fmt.Fprintf(a.Out, "[%s] capture error: %v\n", typeName(c), err)
+		fmt.Fprintf(a.Out, "[%s] capture error: %v\n", miniedr.CapturerName(c), err)
 		return err
 	}
 
 	info, err := c.GetInfo()
 	if err != nil {
-		fmt.Fprintf(a.Out, "[%s] getinfo error: %v\n", typeName(c), err)
+		fmt.Fprintf(a.Out, "[%s] getinfo error: %v\n", miniedr.CapturerName(c), err)
 		return err
 	}
 
-	fmt.Fprintf(a.Out, "[%s] %s\n", typeName(c), info.Summary)
+	fmt.Fprintf(a.Out, "[%s] %s\n", miniedr.CapturerName(c), info.Summary)
 
 	if a.Verbose {
 		verboseInfo := info.Summary
-		if vc, ok := c.(VerboseInfo); ok {
+		if vc, ok := c.(miniedr.VerboseInfo); ok {
 			vi, err := vc.GetVerboseInfo()
 			if err != nil {
-				fmt.Fprintf(a.Out, "[%s] getverboseinfo error: %v\n", typeName(c), err)
+				fmt.Fprintf(a.Out, "[%s] getverboseinfo error: %v\n", miniedr.CapturerName(c), err)
 				return err
 			}
 			verboseInfo = vi
 		}
 
 		ts := time.Now().Format(time.RFC3339)
-		fmt.Fprintf(a.Out, "\n==== %s (verbose) @ %s ====\n%s\n", typeName(c), ts, verboseInfo)
+		fmt.Fprintf(a.Out, "\n==== %s (verbose) @ %s ====\n%s\n", miniedr.CapturerName(c), ts, verboseInfo)
 	}
 	return nil
-}
-
-// DefaultSchedules assigns reasonable intervals per capturer type.
-func DefaultSchedules(cs []Capturer) []CapturerSchedule {
-	var out []CapturerSchedule
-	for _, c := range cs {
-		out = append(out, CapturerSchedule{
-			Capturer: c,
-			Interval: defaultIntervalFor(c),
-		})
-	}
-	return out
-}
-
-func defaultIntervalFor(c Capturer) time.Duration {
-	switch c.(type) {
-	case *CPUCapturer:
-		return 1 * time.Second
-	case *NETCapturer, *ConnCapturer:
-		return 5 * time.Second
-	case *ProcCapturer, *MEMCapturer:
-		return 5 * time.Second
-	case *FileWatchCapturer:
-		return 15 * time.Second
-	case *DISKCapturer:
-		return 30 * time.Second
-	case *PersistCapturer:
-		return 10 * time.Minute
-	default:
-		return 5 * time.Second
-	}
 }

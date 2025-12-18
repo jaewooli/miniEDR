@@ -1,4 +1,4 @@
-package miniedr
+package dashboard
 
 import (
 	"context"
@@ -11,12 +11,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jaewooli/miniedr"
 )
 
 // DashboardServer exposes a lightweight HTML dashboard to view capturer snapshots.
 // It maintains a background capture loop and can push refresh events to the UI.
 type DashboardServer struct {
-	Capturers Capturers
+	Capturers miniedr.Capturers
 
 	mu              sync.RWMutex
 	tmpl            *template.Template
@@ -40,7 +42,7 @@ type DashboardServer struct {
 
 type dashboardItem struct {
 	Name    string
-	Info    InfoData
+	Info    miniedr.InfoData
 	Verbose string
 	Error   string
 	Changed bool
@@ -76,7 +78,7 @@ type dashboardData struct {
 	CaptureIntervalMS int64
 }
 
-func NewDashboardServer(capturers Capturers, title string, verbose bool) *DashboardServer {
+func NewDashboardServer(capturers miniedr.Capturers, title string, verbose bool) *DashboardServer {
 	t := template.Must(template.New("dashboard").Funcs(template.FuncMap{
 		"divMS":  divMS,
 		"chartX": chartX,
@@ -209,8 +211,8 @@ func (d *DashboardServer) captureAndStore() {
 	}
 }
 
-func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose bool, autoRefresh bool, refreshSecs int, eventRefresh bool, capInterval time.Duration) {
-	name := typeName(c)
+func (d *DashboardServer) captureSingle(c miniedr.Capturer, ref, title string, verbose bool, autoRefresh bool, refreshSecs int, eventRefresh bool, capInterval time.Duration) {
+	name := miniedr.CapturerName(c)
 
 	item := dashboardItem{Name: name}
 
@@ -223,7 +225,7 @@ func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose b
 		} else {
 			item.Info = info
 			if verbose {
-				if vc, ok := c.(VerboseInfo); ok {
+				if vc, ok := c.(miniedr.VerboseInfo); ok {
 					verb, err := vc.GetVerboseInfo()
 					if err != nil {
 						item.Error = fmt.Sprintf("getverboseinfo error: %v", err)
@@ -282,7 +284,7 @@ func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose b
 		d.itemIntervals = make(map[string]time.Duration)
 	}
 	d.items[name] = item
-	d.itemIntervals[name] = defaultIntervalFor(c)
+	d.itemIntervals[name] = miniedr.DefaultIntervalFor(c)
 
 	// rebuild items slice
 	items := make([]dashboardItem, 0, len(d.items))
@@ -322,7 +324,7 @@ func (d *DashboardServer) currentSnapshot() dashboardData {
 func (d *DashboardServer) captureLoop(ctx context.Context) {
 	d.mu.RLock()
 	interval := d.captureInterval
-	capturers := append(Capturers{}, d.Capturers...)
+	capturers := append(miniedr.Capturers{}, d.Capturers...)
 	d.mu.RUnlock()
 
 	// per-capturer intervals when interval == 0
@@ -330,7 +332,7 @@ func (d *DashboardServer) captureLoop(ctx context.Context) {
 		var wg sync.WaitGroup
 		for _, c := range capturers {
 			wg.Add(1)
-			go func(c Capturer) {
+			go func(c miniedr.Capturer) {
 				defer wg.Done()
 				d.runPerCapturer(ctx, c)
 			}(c)
@@ -363,8 +365,8 @@ func (d *DashboardServer) ensureInitialSnapshot() {
 	d.captureAndStore()
 }
 
-func (d *DashboardServer) runPerCapturer(ctx context.Context, c Capturer) {
-	interval := defaultIntervalFor(c)
+func (d *DashboardServer) runPerCapturer(ctx context.Context, c miniedr.Capturer) {
+	interval := miniedr.DefaultIntervalFor(c)
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
@@ -378,7 +380,7 @@ func (d *DashboardServer) runPerCapturer(ctx context.Context, c Capturer) {
 	eventRefresh := d.eventRefresh
 	capInterval := d.displayInterval
 	hasSnap := d.hasSnapshot
-	name := typeName(c)
+	name := miniedr.CapturerName(c)
 	_, hasItem := d.items[name]
 	d.mu.RUnlock()
 
@@ -966,10 +968,10 @@ func divMS(ms int64) float64 {
 	return float64(ms) / 1000.0
 }
 
-func minCapturerInterval(cs []Capturer) time.Duration {
+func minCapturerInterval(cs miniedr.Capturers) time.Duration {
 	var min time.Duration
 	for _, c := range cs {
-		iv := defaultIntervalFor(c)
+		iv := miniedr.DefaultIntervalFor(c)
 		if iv <= 0 {
 			continue
 		}
@@ -1031,7 +1033,7 @@ func chartX(idx, total int) int {
 	return idx * step
 }
 
-func deriveGraphs(name string, info InfoData) []graphInfo {
+func deriveGraphs(name string, info miniedr.InfoData) []graphInfo {
 	up := strings.ToUpper(name)
 	var gs []graphInfo
 	switch {
@@ -1263,7 +1265,7 @@ func humanBytes(v float64) string {
 	}
 }
 
-func summarizeInfo(name string, info InfoData) string {
+func summarizeInfo(name string, info miniedr.InfoData) string {
 	up := strings.ToUpper(name)
 	m := info.Metrics
 	summary := info.Summary

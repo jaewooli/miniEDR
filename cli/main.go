@@ -13,11 +13,13 @@ import (
 	"time"
 
 	"github.com/jaewooli/miniedr"
+	"github.com/jaewooli/miniedr/agent"
+	dash "github.com/jaewooli/miniedr/dashboard"
 )
 
 func main() {
 	verbose := flag.Bool("verbose", false, "print detailed capture output")
-	dashboard := flag.Bool("dashboard", true, "run dashboard server; set false to run agent-only")
+	dashboardEnabled := flag.Bool("dashboard", true, "run dashboard server; set false to run agent-only")
 	dashboardAddr := flag.String("dashboard-addr", ":8090", "dashboard listen addr")
 	dashboardTitle := flag.String("dashboard-title", "miniEDR Dashboard", "dashboard page title")
 	dashboardAuto := flag.Bool("dashboard-autorefresh", false, "enable dashboard auto-refresh")
@@ -27,7 +29,7 @@ func main() {
 	configPath := flag.String("config", "", "path to config file (default: auto-detect config.yaml)")
 	flag.Parse()
 
-	printStartupHelp(*dashboard, *dashboardAddr)
+	printStartupHelp(*dashboardEnabled, *dashboardAddr)
 
 	cb := miniedr.NewCapturersBuilder()
 	if path := resolveConfigPath(*configPath); path != "" {
@@ -43,26 +45,26 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if *dashboard {
-		dash := miniedr.NewDashboardServer(capturers, *dashboardTitle, *verbose)
-		dash.SetAutoRefresh(*dashboardAuto, *dashboardAutoSec)
-		dash.SetEventRefresh(*dashboardEventRefresh)
+	if *dashboardEnabled {
+		ds := dash.NewDashboardServer(capturers, *dashboardTitle, *verbose)
+		ds.SetAutoRefresh(*dashboardAuto, *dashboardAutoSec)
+		ds.SetEventRefresh(*dashboardEventRefresh)
 		if *dashboardCaptureSec >= 0 {
-			dash.SetCaptureInterval(time.Duration(*dashboardCaptureSec) * time.Second)
+			ds.SetCaptureInterval(time.Duration(*dashboardCaptureSec) * time.Second)
 		}
 		log.Printf("dashboard listening on %s", *dashboardAddr)
-		if err := dash.Run(ctx, *dashboardAddr); err != nil && !errors.Is(err, context.Canceled) {
+		if err := ds.Run(ctx, *dashboardAddr); err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatalf("dashboard error: %v", err)
 		}
 		return
 	}
 
 	schedules := miniedr.DefaultSchedules(capturers)
-	agent := miniedr.NewEDRAgent(schedules)
-	agent.Out = os.Stdout
-	agent.Verbose = *verbose
+	edrAgent := agent.NewEDRAgent(schedules)
+	edrAgent.Out = os.Stdout
+	edrAgent.Verbose = *verbose
 
-	if err := agent.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	if err := edrAgent.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("agent error: %v", err)
 	}
 }
