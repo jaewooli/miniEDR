@@ -34,6 +34,7 @@ type CollectAgent struct {
 	Sinks     []miniedr.TelemetrySink
 	Detector  *miniedr.Detector
 	Responder *miniedr.ResponderPipeline
+	Router    *miniedr.ResponseRouter
 
 	mu        sync.Mutex
 	Errs      []error
@@ -164,8 +165,9 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer, interval time.Duration) 
 	if a.Detector != nil {
 		alerts = a.Detector.Evaluate(info)
 	}
-	if len(alerts) > 0 && a.Responder != nil {
-		if errs := a.Responder.Run(alerts); len(errs) > 0 {
+	if len(alerts) > 0 {
+		errs := a.runResponders(alerts)
+		if len(errs) > 0 {
 			for _, er := range errs {
 				fmt.Fprintf(a.Out, "[%s] responder error: %v\n", capturer.CapturerName(c), er)
 				a.recordErr(er)
@@ -209,6 +211,13 @@ func (a *CollectAgent) AddSink(s miniedr.TelemetrySink) {
 // AddResponder registers an alert responder for detections.
 func (a *CollectAgent) AddResponder(r miniedr.AlertResponder) {
 	if r == nil {
+		return
+	}
+	if a.Router != nil {
+		if a.Router.Pipeline == nil {
+			a.Router.Pipeline = &miniedr.ResponderPipeline{}
+		}
+		a.Router.Pipeline.Responders = append(a.Router.Pipeline.Responders, r)
 		return
 	}
 	if a.Responder == nil {
@@ -288,4 +297,14 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+func (a *CollectAgent) runResponders(alerts []miniedr.Alert) []error {
+	if a.Router != nil {
+		return a.Router.Run(alerts)
+	}
+	if a.Responder != nil {
+		return a.Responder.Run(alerts)
+	}
+	return nil
 }
