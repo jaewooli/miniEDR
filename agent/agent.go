@@ -34,9 +34,11 @@ type CollectAgent struct {
 	Sinks     []miniedr.TelemetrySink
 	Pipeline  *miniedr.AlertPipeline
 
-	mu        sync.Mutex
-	Errs      []error
-	sinkStats map[string]*sinkStat
+	mu         sync.Mutex
+	Errs       []error
+	sinkStats  map[string]*sinkStat
+	pipelineCh chan queueItem
+	pipelineWG sync.WaitGroup
 }
 
 func NewCollectAgent(schedules []CapturerSchedule) *CollectAgent {
@@ -76,6 +78,15 @@ func (a *CollectAgent) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	if a.pipelineCh == nil {
+		a.pipelineCh = make(chan queueItem, 64)
+	}
+	a.pipelineWG.Add(1)
+	go func() {
+		defer a.pipelineWG.Done()
+		a.pipelineLoop(ctx)
+	}()
+
 	var wg sync.WaitGroup
 	for _, sc := range a.Schedules {
 		wg.Add(1)
@@ -87,6 +98,7 @@ func (a *CollectAgent) Run(ctx context.Context) error {
 
 	<-ctx.Done()
 	wg.Wait()
+	a.pipelineWG.Wait()
 	return a.firstErrorOr(ctx.Err())
 }
 
@@ -146,30 +158,6 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer, interval time.Duration) 
 		info.Meta.CapturedAt = time.Now()
 	}
 
-	for _, sink := range a.Sinks {
-		if sink == nil {
-			continue
-		}
-		if err := sink.Consume(info); err != nil {
-			fmt.Fprintf(a.Out, "[%s] sink error: %v\n", capturer.CapturerName(c), err)
-			a.recordSinkResult(sink, err)
-			continue
-		}
-		a.recordSinkResult(sink, nil)
-	}
-
-	// detection & response pipeline
-	if a.Pipeline != nil {
-		alerts, errs := a.Pipeline.Process(info)
-		for _, er := range errs {
-			fmt.Fprintf(a.Out, "[%s] responder error: %v\n", capturer.CapturerName(c), er)
-			a.recordErr(er)
-		}
-		if len(alerts) > 0 && a.Verbose {
-			fmt.Fprintf(a.Out, "[%s] alerts: %d\n", capturer.CapturerName(c), len(alerts))
-		}
-	}
-
 	fmt.Fprintf(a.Out, "[%s] %s\n", capturer.CapturerName(c), info.Summary)
 
 	if a.Verbose {
@@ -185,6 +173,21 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer, interval time.Duration) 
 
 		ts := time.Now().Format(time.RFC3339)
 		fmt.Fprintf(a.Out, "\n==== %s (verbose) @ %s ====\n%s\n", capturer.CapturerName(c), ts, verboseInfo)
+	}
+
+	name := capturer.CapturerName(c)
+	if a.pipelineCh != nil {
+		select {
+		case a.pipelineCh <- queueItem{name: name, info: info}:
+			// queued
+		default:
+			// queue full, process synchronously to avoid loss
+			fmt.Fprintf(a.Out, "[%s] pipeline queue full; processing inline\n", name)
+			a.recordErr(fmt.Errorf("pipeline queue full"))
+			a.processInfo(name, info)
+		}
+	} else {
+		a.processInfo(name, info)
 	}
 	return nil
 }
@@ -288,4 +291,45 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+func (a *CollectAgent) processInfo(name string, info capturer.InfoData) {
+	for _, sink := range a.Sinks {
+		if sink == nil {
+			continue
+		}
+		if err := sink.Consume(info); err != nil {
+			fmt.Fprintf(a.Out, "[%s] sink error: %v\n", name, err)
+			a.recordSinkResult(sink, err)
+			continue
+		}
+		a.recordSinkResult(sink, nil)
+	}
+
+	if a.Pipeline != nil {
+		alerts, errs := a.Pipeline.Process(info)
+		for _, er := range errs {
+			fmt.Fprintf(a.Out, "[%s] responder error: %v\n", name, er)
+			a.recordErr(er)
+		}
+		if len(alerts) > 0 && a.Verbose {
+			fmt.Fprintf(a.Out, "[%s] alerts: %d\n", name, len(alerts))
+		}
+	}
+}
+
+func (a *CollectAgent) pipelineLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case item := <-a.pipelineCh:
+			a.processInfo(item.name, item.info)
+		}
+	}
+}
+
+type queueItem struct {
+	name string
+	info capturer.InfoData
 }
