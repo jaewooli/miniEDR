@@ -32,16 +32,16 @@ type FileEvent struct {
 	Meta *FileMeta
 }
 
-type FileWatchSnapshot struct {
+type FileChangeSnapshot struct {
 	At    time.Time
 	Files map[string]FileMeta
 
 	Events []FileEvent
 }
 
-// FileWatchCapturer polls one or more directories/files and produces a small diff.
+// FileChangeCapturer polls one or more directories/files and produces a small diff.
 // This is intentionally lightweight and dependency-free (no fsnotify).
-type FileWatchCapturer struct {
+type FileChangeCapturer struct {
 	Now func() time.Time
 
 	Paths []string
@@ -57,12 +57,12 @@ type FileWatchCapturer struct {
 	// WalkFn is filepath.WalkDir by default.
 	WalkFn func(root string, fn fs.WalkDirFunc) error
 
-	prev *FileWatchSnapshot
-	curr *FileWatchSnapshot
+	prev *FileChangeSnapshot
+	curr *FileChangeSnapshot
 }
 
-func NewFileWatchCapturer(paths ...string) *FileWatchCapturer {
-	return &FileWatchCapturer{
+func NewFileChangeCapturer(paths ...string) *FileChangeCapturer {
+	return &FileChangeCapturer{
 		Now:      time.Now,
 		Paths:    defaultWatchPaths(),
 		MaxFiles: 50_000,
@@ -70,7 +70,7 @@ func NewFileWatchCapturer(paths ...string) *FileWatchCapturer {
 	}
 }
 
-func (w *FileWatchCapturer) Capture() error {
+func (w *FileChangeCapturer) Capture() error {
 	if w.Now == nil {
 		w.Now = time.Now
 	}
@@ -104,7 +104,7 @@ func (w *FileWatchCapturer) Capture() error {
 		return ok
 	}
 
-	snap := &FileWatchSnapshot{
+	snap := &FileChangeSnapshot{
 		At:    w.Now(),
 		Files: make(map[string]FileMeta),
 	}
@@ -181,9 +181,9 @@ func (w *FileWatchCapturer) Capture() error {
 	return nil
 }
 
-func (w *FileWatchCapturer) GetInfo() (InfoData, error) {
+func (w *FileChangeCapturer) GetInfo() (InfoData, error) {
 	if w.curr == nil {
-		return InfoData{Summary: "FileWatchSnapshot(empty)"}, nil
+		return InfoData{Summary: "FileChangeSnapshot(empty)"}, nil
 	}
 	// short sample
 	sample := ""
@@ -195,7 +195,7 @@ func (w *FileWatchCapturer) GetInfo() (InfoData, error) {
 		}
 	}
 	summary := fmt.Sprintf(
-		"FileWatchSnapshot(at=%s, files=%d, events=%d%s)",
+		"FileChangeSnapshot(at=%s, files=%d, events=%d%s)",
 		w.curr.At.Format(time.RFC3339),
 		len(w.curr.Files),
 		len(w.curr.Events),
@@ -209,13 +209,13 @@ func (w *FileWatchCapturer) GetInfo() (InfoData, error) {
 }
 
 // GetVerboseInfo lists watch roots and recent file events.
-func (w *FileWatchCapturer) GetVerboseInfo() (string, error) {
+func (w *FileChangeCapturer) GetVerboseInfo() (string, error) {
 	if w.curr == nil {
-		return "FileWatchSnapshot(verbose-empty)", nil
+		return "FileChangeSnapshot(verbose-empty)", nil
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "FileWatchSnapshot(at=%s, paths=%d, files=%d, events=%d, maxFiles=%d)\n",
+	fmt.Fprintf(&b, "FileChangeSnapshot(at=%s, paths=%d, files=%d, events=%d, maxFiles=%d)\n",
 		w.curr.At.Format(time.RFC3339),
 		len(w.Paths),
 		len(w.curr.Files),
@@ -250,7 +250,7 @@ func (w *FileWatchCapturer) GetVerboseInfo() (string, error) {
 }
 
 // IsWarm reports whether a previous snapshot exists (needed for event deltas).
-func (w *FileWatchCapturer) IsWarm() bool {
+func (w *FileChangeCapturer) IsWarm() bool {
 	return w.prev != nil
 }
 

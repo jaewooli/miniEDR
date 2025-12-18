@@ -136,7 +136,7 @@ func TestCapturerTableDriven(t *testing.T) {
 			name: "filewatch detects created",
 			run: func(t *testing.T) {
 				dir := t.TempDir()
-				w := &capturer.FileWatchCapturer{
+				w := &capturer.FileChangeCapturer{
 					Paths:    []string{dir},
 					MaxFiles: 10,
 					WalkFn:   filepath.WalkDir,

@@ -16,7 +16,7 @@ type DiskCfg struct {
 	Paths   []string `yaml:"paths"`
 }
 
-type FileWatchCfg struct {
+type FileChangeCfg struct {
 	Enabled  bool     `yaml:"enabled"`
 	Paths    []string `yaml:"paths"`
 	MaxFiles int      `yaml:"max_files"`
@@ -24,14 +24,14 @@ type FileWatchCfg struct {
 
 type CapturersConfig struct {
 	Capturers struct {
-		CPU       CapturerToggle `yaml:"cpu"`
-		Conn      ConnCfg        `yaml:"conn"`
-		Disk      DiskCfg        `yaml:"disk"`
-		FileWatch FileWatchCfg   `yaml:"filewatch"`
-		MEM       CapturerToggle `yaml:"mem"`
-		NET       CapturerToggle `yaml:"net"`
-		Persist   CapturerToggle `yaml:"persist"`
-		Proc      CapturerToggle `yaml:"proc"`
+		CPU        CapturerToggle `yaml:"cpu"`
+		Conn       ConnCfg        `yaml:"conn"`
+		Disk       DiskCfg        `yaml:"disk"`
+		FileChange FileChangeCfg  `yaml:"filewatch"`
+		MEM        CapturerToggle `yaml:"mem"`
+		NET        CapturerToggle `yaml:"net"`
+		Persist    CapturerToggle `yaml:"persist"`
+		Proc       CapturerToggle `yaml:"proc"`
 	} `yaml:"capturers"`
 }
 
@@ -45,9 +45,9 @@ func defaultCapturersConfig() CapturersConfig {
 	cfg.Capturers.Disk.Enabled = true
 	cfg.Capturers.Disk.Paths = []string{"/"}
 
-	cfg.Capturers.FileWatch.Enabled = true
-	cfg.Capturers.FileWatch.Paths = nil // NewFileWatchCapturer() 내부 defaultWatchPaths() 쓰게
-	cfg.Capturers.FileWatch.MaxFiles = 50_000
+	cfg.Capturers.FileChange.Enabled = true
+	cfg.Capturers.FileChange.Paths = nil // NewFileChangeCapturer() 내부 defaultWatchPaths() 쓰게
+	cfg.Capturers.FileChange.MaxFiles = 50_000
 
 	cfg.Capturers.MEM.Enabled = true
 	cfg.Capturers.NET.Enabled = true

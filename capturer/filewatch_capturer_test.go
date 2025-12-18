@@ -11,14 +11,14 @@ import (
 	"github.com/jaewooli/miniedr/capturer"
 )
 
-func TestFileWatchCapturer(t *testing.T) {
+func TestFileChangeCapturer(t *testing.T) {
 	dir := t.TempDir()
 	keep := filepath.Join(dir, "keep.txt")
 	if err := os.WriteFile(keep, []byte("keep"), 0o644); err != nil {
 		t.Fatalf("write keep: %v", err)
 	}
 
-	w := &capturer.FileWatchCapturer{
+	w := &capturer.FileChangeCapturer{
 		Paths:    []string{dir},
 		MaxFiles: 10,
 		WalkFn:   filepath.WalkDir,
@@ -26,7 +26,7 @@ func TestFileWatchCapturer(t *testing.T) {
 
 	got, err := w.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got.Summary, "FileWatchSnapshot(empty)")
+	assertEqual(t, got.Summary, "FileChangeSnapshot(empty)")
 
 	nowCalls := 0
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0)}
@@ -51,10 +51,10 @@ func TestFileWatchCapturer(t *testing.T) {
 	assertError(t, w.Capture(), "")
 	got, err = w.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got.Summary, "FileWatchSnapshot(at=1970-01-01T09:00:20+09:00, files=1, events=2, sample=created:new.txt(+1))")
+	assertEqual(t, got.Summary, "FileChangeSnapshot(at=1970-01-01T09:00:20+09:00, files=1, events=2, sample=created:new.txt(+1))")
 
 	t.Run("error when paths empty", func(t *testing.T) {
-		fw := &capturer.FileWatchCapturer{Paths: nil, WalkFn: filepath.WalkDir}
+		fw := &capturer.FileChangeCapturer{Paths: nil, WalkFn: filepath.WalkDir}
 		err := fw.Capture()
 		assertError(t, err, "filewatch capturer: Paths is empty")
 	})
@@ -65,7 +65,7 @@ func TestFileWatchCapturer(t *testing.T) {
 			_ = os.WriteFile(filepath.Join(dir3, fmt.Sprintf("f%d.txt", i)), []byte("x"), 0o644)
 		}
 		scanned := 0
-		fw := &capturer.FileWatchCapturer{
+		fw := &capturer.FileChangeCapturer{
 			Paths:    []string{dir3},
 			MaxFiles: 2,
 			WalkFn: func(root string, fn fs.WalkDirFunc) error {
@@ -89,7 +89,7 @@ func TestFileWatchCapturer(t *testing.T) {
 
 	t.Run("single event sample without suffix", func(t *testing.T) {
 		dir2 := t.TempDir()
-		w2 := &capturer.FileWatchCapturer{
+		w2 := &capturer.FileChangeCapturer{
 			Paths:    []string{dir2},
 			MaxFiles: 10,
 			WalkFn:   filepath.WalkDir,
@@ -112,11 +112,11 @@ func TestFileWatchCapturer(t *testing.T) {
 		assertError(t, w2.Capture(), "")
 		got, err := w2.GetInfo()
 		assertError(t, err, "")
-		assertEqual(t, got.Summary, "FileWatchSnapshot(at=1970-01-01T09:00:40+09:00, files=1, events=1, sample=created:one.txt)")
+		assertEqual(t, got.Summary, "FileChangeSnapshot(at=1970-01-01T09:00:40+09:00, files=1, events=1, sample=created:one.txt)")
 	})
 }
 
-func TestFileWatchCapturerVerbose(t *testing.T) {
+func TestFileChangeCapturerVerbose(t *testing.T) {
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0)}
 	nowCalls := 0
 	filesSeq := []map[string]capturer.FileMeta{
@@ -146,7 +146,7 @@ func TestFileWatchCapturerVerbose(t *testing.T) {
 		return nil
 	}
 
-	w := &capturer.FileWatchCapturer{
+	w := &capturer.FileChangeCapturer{
 		Paths: []string{"/root"},
 		Now: func() time.Time {
 			if nowCalls >= len(nowSeq) {
@@ -166,7 +166,7 @@ func TestFileWatchCapturerVerbose(t *testing.T) {
 	got, err := w.GetVerboseInfo()
 	assertError(t, err, "")
 	want := "" +
-		"FileWatchSnapshot(at=1970-01-01T09:00:20+09:00, paths=1, files=2, events=2, maxFiles=10)\n" +
+		"FileChangeSnapshot(at=1970-01-01T09:00:20+09:00, paths=1, files=2, events=2, maxFiles=10)\n" +
 		"Roots: /root\n" +
 		"Extensions: .txt\n" +
 		"Events:\n" +

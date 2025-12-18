@@ -79,14 +79,14 @@ func (cb *CapturersBuilder) Build() (Capturers, error) {
 		}
 	}
 
-	// FileWatch
-	if cfg.Capturers.FileWatch.Enabled {
-		fw := NewFileWatchCapturer() // 인자 없는 기본 생성자 (defaultWatchPaths 내부 사용)
-		if len(cfg.Capturers.FileWatch.Paths) > 0 {
-			fw.Paths = cfg.Capturers.FileWatch.Paths
+	// FileChange
+	if cfg.Capturers.FileChange.Enabled {
+		fw := NewFileChangeCapturer() // 인자 없는 기본 생성자 (defaultWatchPaths 내부 사용)
+		if len(cfg.Capturers.FileChange.Paths) > 0 {
+			fw.Paths = cfg.Capturers.FileChange.Paths
 		}
-		if cfg.Capturers.FileWatch.MaxFiles > 0 {
-			fw.MaxFiles = cfg.Capturers.FileWatch.MaxFiles
+		if cfg.Capturers.FileChange.MaxFiles > 0 {
+			fw.MaxFiles = cfg.Capturers.FileChange.MaxFiles
 		}
 		out = append(out, fw)
 	}
