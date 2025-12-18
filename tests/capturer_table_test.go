@@ -60,7 +60,7 @@ func TestCapturerTableDriven(t *testing.T) {
 				_ = c.Capture()
 				_ = c.Capture()
 				info, _ := c.GetInfo()
-				assertContains(t, info, "totalUsage=85.71%")
+				assertContains(t, info.Summary, "totalUsage=85.71%")
 			},
 		},
 		{
@@ -77,7 +77,7 @@ func TestCapturerTableDriven(t *testing.T) {
 				}
 				_ = m.Capture()
 				info, _ := m.GetInfo()
-				assertContains(t, info, "(25.00%)")
+				assertContains(t, info.Summary, "(25.00%)")
 			},
 		},
 		{
@@ -102,8 +102,8 @@ func TestCapturerTableDriven(t *testing.T) {
 				}
 				_ = d.Capture()
 				info, _ := d.GetInfo()
-				assertContains(t, info, "read 100B/s")
-				assertContains(t, info, "write 100B/s")
+				assertContains(t, info.Summary, "read 100B/s")
+				assertContains(t, info.Summary, "write 100B/s")
 			},
 		},
 		{
@@ -128,8 +128,8 @@ func TestCapturerTableDriven(t *testing.T) {
 				}
 				_ = n.Capture()
 				info, _ := n.GetInfo()
-				assertContains(t, info, "rxRate=600B/s")
-				assertContains(t, info, "txRate=300B/s")
+				assertContains(t, info.Summary, "rxRate=600B/s")
+				assertContains(t, info.Summary, "txRate=300B/s")
 			},
 		},
 		{
@@ -147,7 +147,7 @@ func TestCapturerTableDriven(t *testing.T) {
 				createFile(t, dir, "a.txt")
 				_ = w.Capture()
 				info, _ := w.GetInfo()
-				assertContains(t, info, "events=1")
+				assertContains(t, info.Summary, "events=1")
 			},
 		},
 		{
@@ -171,7 +171,7 @@ func TestCapturerTableDriven(t *testing.T) {
 				}
 				_ = p.Capture()
 				info, _ := p.GetInfo()
-				assertContains(t, info, "new=1")
+				assertContains(t, info.Summary, "new=1")
 			},
 		},
 		{
@@ -192,7 +192,7 @@ func TestCapturerTableDriven(t *testing.T) {
 				p.Now = func() time.Time { return time.Unix(5, 0) }
 				_ = p.Capture()
 				info, _ := p.GetInfo()
-				assertContains(t, info, "added=1")
+				assertContains(t, info.Summary, "added=1")
 			},
 		},
 		{
@@ -225,7 +225,7 @@ func TestCapturerTableDriven(t *testing.T) {
 				}
 				_ = n.Capture()
 				info, _ := n.GetInfo()
-				assertContains(t, info, "rxRate=0B/s")
+				assertContains(t, info.Summary, "rxRate=0B/s")
 			},
 		},
 	}

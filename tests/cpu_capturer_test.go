@@ -14,7 +14,7 @@ func TestCPUCapturer(t *testing.T) {
 
 	got, err := c.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "CPUSnapshot(empty)")
+	assertEqual(t, got.Summary, "CPUSnapshot(empty)")
 
 	t.Run("error when TimesFn nil", func(t *testing.T) {
 		c2 := &miniedr.CPUCapturer{}
@@ -68,12 +68,12 @@ func TestCPUCapturer(t *testing.T) {
 	assertError(t, c.Capture(), "")
 	got, err = c.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "CPUSnapshot(at=1970-01-01T09:00:10+09:00, totalUsage=n/a)")
+	assertEqual(t, got.Summary, "CPUSnapshot(at=1970-01-01T09:00:10+09:00, totalUsage=n/a)")
 
 	assertError(t, c.Capture(), "")
 	got, err = c.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "CPUSnapshot(at=1970-01-01T09:00:20+09:00, totalUsage=85.71%, cpu0=75.0% cpu1=50.0%)")
+	assertEqual(t, got.Summary, "CPUSnapshot(at=1970-01-01T09:00:20+09:00, totalUsage=85.71%, cpu0=75.0% cpu1=50.0%)")
 }
 
 func TestCPUCapturerVerbose(t *testing.T) {

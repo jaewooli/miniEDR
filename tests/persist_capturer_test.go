@@ -23,7 +23,7 @@ func TestPersistCapturer(t *testing.T) {
 
 	got, err := p.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "PersistSnapshot(empty)")
+	assertEqual(t, got.Summary, "PersistSnapshot(empty)")
 
 	nowCalls := 0
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0), time.Unix(30, 0)}
@@ -38,17 +38,17 @@ func TestPersistCapturer(t *testing.T) {
 	assertError(t, p.Capture(), "")
 	got, err = p.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "PersistSnapshot(at=1970-01-01T09:00:10+09:00, sources=1, added=0, changed=0, removed=0)")
+	assertEqual(t, got.Summary, "PersistSnapshot(at=1970-01-01T09:00:10+09:00, sources=1, added=0, changed=0, removed=0)")
 
 	assertError(t, p.Capture(), "")
 	got, err = p.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "PersistSnapshot(at=1970-01-01T09:00:20+09:00, sources=1, added=1, changed=0, removed=1)")
+	assertEqual(t, got.Summary, "PersistSnapshot(at=1970-01-01T09:00:20+09:00, sources=1, added=1, changed=0, removed=1)")
 
 	assertError(t, p.Capture(), "")
 	got, err = p.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "PersistSnapshot(at=1970-01-01T09:00:30+09:00, sources=1, added=0, changed=1, removed=0)")
+	assertEqual(t, got.Summary, "PersistSnapshot(at=1970-01-01T09:00:30+09:00, sources=1, added=0, changed=1, removed=0)")
 
 	t.Run("error when sources empty", func(t *testing.T) {
 		p2 := &miniedr.PersistCapturer{Sources: nil}

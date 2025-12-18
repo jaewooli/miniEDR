@@ -11,8 +11,8 @@ import (
 
 type StubCapturer struct{}
 
-func (s *StubCapturer) GetInfo() (string, error) { return "", nil }
-func (s *StubCapturer) Capture() error           { return nil }
+func (s *StubCapturer) GetInfo() (miniedr.InfoData, error) { return miniedr.InfoData{}, nil }
+func (s *StubCapturer) Capture() error                     { return nil }
 
 type stubPersistSource struct {
 	name      string

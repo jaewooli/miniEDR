@@ -16,7 +16,7 @@ import (
 
 type dashStub struct {
 	name    string
-	info    string
+	info    miniedr.InfoData
 	verbose string
 	err     error
 }
@@ -35,18 +35,18 @@ func (c *changingStub) Capture() error {
 	}
 	return nil
 }
-func (c *changingStub) GetInfo() (string, error) {
+func (c *changingStub) GetInfo() (miniedr.InfoData, error) {
 	if c.idx < 0 {
-		return "", nil
+		return miniedr.InfoData{}, nil
 	}
-	return c.infos[c.idx], nil
+	return miniedr.InfoData{Summary: c.infos[c.idx]}, nil
 }
 func (c *changingStub) GetVerboseInfo() (string, error) { return "", nil }
 
 func (d *dashStub) Capture() error { return d.err }
-func (d *dashStub) GetInfo() (string, error) {
+func (d *dashStub) GetInfo() (miniedr.InfoData, error) {
 	if d.err != nil {
-		return "", d.err
+		return miniedr.InfoData{}, d.err
 	}
 	return d.info, nil
 }
@@ -59,8 +59,8 @@ func (d *dashStub) GetVerboseInfo() (string, error) {
 
 func TestDashboardSnapshotAndRender(t *testing.T) {
 	cs := miniedr.Capturers{
-		&dashStub{name: "CPUCapturer", info: "CPUSnapshot(at=..., totalUsage=1.1%)", verbose: "cpu verbose"},
-		&dashStub{name: "MEMCapturer", info: "MEMSnapshot(at=..., RAM: Total=0B Avail=0B UsedApprox=0B (0.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)", verbose: "mem verbose"},
+		&dashStub{name: "CPUCapturer", info: miniedr.InfoData{Summary: "CPUSnapshot(at=..., totalUsage=1.1%)"}, verbose: "cpu verbose"},
+		&dashStub{name: "MEMCapturer", info: miniedr.InfoData{Summary: "MEMSnapshot(at=..., RAM: Total=0B Avail=0B UsedApprox=0B (0.00%), Free=0B Buffers=0B Cached=0B; Swap: Total=0B Used=0B (0.00%) Free=0B, Sin=0B Sout=0B)"}, verbose: "mem verbose"},
 	}
 	ds := miniedr.NewDashboardServer(cs, "TestDash", true)
 
@@ -146,7 +146,7 @@ func readBody(t *testing.T, res *http.Response) string {
 
 func TestDashboardEventStream(t *testing.T) {
 	ds := miniedr.NewDashboardServer(miniedr.Capturers{
-		&dashStub{name: "cpu", info: "cpu info"},
+		&dashStub{name: "cpu", info: miniedr.InfoData{Summary: "cpu info"}},
 	}, "TestDash", false)
 	ds.SetNowFunc(func() time.Time { return time.Unix(200, 0) })
 	ds.SetAutoRefresh(false, 10)

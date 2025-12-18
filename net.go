@@ -54,10 +54,12 @@ func (n *NETCapturer) Capture() error {
 	return nil
 }
 
-func (n *NETCapturer) GetInfo() (string, error) {
+func (n *NETCapturer) GetInfo() (InfoData, error) {
 	if n.curr == nil {
-		return "NETSnapshot(empty)", nil
+		return InfoData{Summary: "NETSnapshot(empty)"}, nil
 	}
+
+	metrics := make(map[string]float64)
 
 	// 델타 기반 초당 트래픽(rate) 계산: (BytesDelta / seconds)
 	rxRate, txRate := "0B/s", "0B/s"
@@ -77,17 +79,25 @@ func (n *NETCapturer) GetInfo() (string, error) {
 					txDelta += cur.BytesSent - prev.BytesSent
 				}
 			}
-			rxRate = fmt.Sprintf("%dB/s", uint64(float64(rxDelta)/sec))
-			txRate = fmt.Sprintf("%dB/s", uint64(float64(txDelta)/sec))
+			rx := float64(rxDelta) / sec
+			tx := float64(txDelta) / sec
+			rxRate = fmt.Sprintf("%dB/s", uint64(rx))
+			txRate = fmt.Sprintf("%dB/s", uint64(tx))
+			metrics["net.rx_bytes_per_sec"] = rx
+			metrics["net.tx_bytes_per_sec"] = tx
 		}
 	}
 
-	return fmt.Sprintf(
+	summary := fmt.Sprintf(
 		"NETSnapshot(at=%s, ifaces=%d, rxRate=%s, txRate=%s)",
 		n.curr.At.Format(time.RFC3339),
 		len(n.curr.PerIF),
 		rxRate, txRate,
-	), nil
+	)
+	if len(metrics) == 0 {
+		metrics = nil
+	}
+	return InfoData{Summary: summary, Metrics: metrics}, nil
 }
 
 // GetVerboseInfo returns per-interface traffic including packet/error deltas.

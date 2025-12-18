@@ -118,10 +118,10 @@ func (a *EDRAgent) captureOnce(c Capturer) error {
 		return err
 	}
 
-	fmt.Fprintf(a.Out, "[%s] %s\n", typeName(c), info)
+	fmt.Fprintf(a.Out, "[%s] %s\n", typeName(c), info.Summary)
 
 	if a.Verbose {
-		verboseInfo := info
+		verboseInfo := info.Summary
 		if vc, ok := c.(VerboseInfo); ok {
 			vi, err := vc.GetVerboseInfo()
 			if err != nil {

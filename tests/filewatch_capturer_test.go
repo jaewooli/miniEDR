@@ -25,7 +25,7 @@ func TestFileWatchCapturer(t *testing.T) {
 
 	got, err := w.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "FileWatchSnapshot(empty)")
+	assertEqual(t, got.Summary, "FileWatchSnapshot(empty)")
 
 	nowCalls := 0
 	nowSeq := []time.Time{time.Unix(10, 0), time.Unix(20, 0)}
@@ -50,7 +50,7 @@ func TestFileWatchCapturer(t *testing.T) {
 	assertError(t, w.Capture(), "")
 	got, err = w.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "FileWatchSnapshot(at=1970-01-01T09:00:20+09:00, files=1, events=2, sample=created:new.txt(+1))")
+	assertEqual(t, got.Summary, "FileWatchSnapshot(at=1970-01-01T09:00:20+09:00, files=1, events=2, sample=created:new.txt(+1))")
 
 	t.Run("single event sample without suffix", func(t *testing.T) {
 		dir2 := t.TempDir()
@@ -77,7 +77,7 @@ func TestFileWatchCapturer(t *testing.T) {
 		assertError(t, w2.Capture(), "")
 		got, err := w2.GetInfo()
 		assertError(t, err, "")
-		assertEqual(t, got, "FileWatchSnapshot(at=1970-01-01T09:00:40+09:00, files=1, events=1, sample=created:one.txt)")
+		assertEqual(t, got.Summary, "FileWatchSnapshot(at=1970-01-01T09:00:40+09:00, files=1, events=1, sample=created:one.txt)")
 	})
 }
 

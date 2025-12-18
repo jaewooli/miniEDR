@@ -136,18 +136,24 @@ func (c *ConnCapturer) Capture() error {
 	return nil
 }
 
-func (c *ConnCapturer) GetInfo() (string, error) {
+func (c *ConnCapturer) GetInfo() (InfoData, error) {
 	if c.curr == nil {
-		return "ConnSnapshot(empty)", nil
+		return InfoData{Summary: "ConnSnapshot(empty)"}, nil
 	}
-	return fmt.Sprintf(
+	metrics := map[string]float64{
+		"conn.total": float64(len(c.curr.Conns)),
+		"conn.new":   float64(len(c.curr.New)),
+		"conn.dead":  float64(len(c.curr.Dead)),
+	}
+	summary := fmt.Sprintf(
 		"ConnSnapshot(at=%s, kind=%s, conns=%d, new=%d, dead=%d)",
 		c.curr.At.Format(time.RFC3339),
 		c.Kind,
 		len(c.curr.Conns),
 		len(c.curr.New),
 		len(c.curr.Dead),
-	), nil
+	)
+	return InfoData{Summary: summary, Metrics: metrics}, nil
 }
 
 // GetVerboseInfo returns connection states and samples of new/dead entries.

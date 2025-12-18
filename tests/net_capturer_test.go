@@ -14,7 +14,7 @@ func TestNETCapturer(t *testing.T) {
 
 	got, err := n.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "NETSnapshot(empty)")
+	assertEqual(t, got.Summary, "NETSnapshot(empty)")
 
 	t.Run("error when IOFn nil", func(t *testing.T) {
 		n2 := &miniedr.NETCapturer{}
@@ -52,12 +52,12 @@ func TestNETCapturer(t *testing.T) {
 	assertError(t, n.Capture(), "")
 	got, err = n.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "NETSnapshot(at=1970-01-01T09:00:10+09:00, ifaces=2, rxRate=0B/s, txRate=0B/s)")
+	assertEqual(t, got.Summary, "NETSnapshot(at=1970-01-01T09:00:10+09:00, ifaces=2, rxRate=0B/s, txRate=0B/s)")
 
 	assertError(t, n.Capture(), "")
 	got, err = n.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "NETSnapshot(at=1970-01-01T09:00:15+09:00, ifaces=2, rxRate=22B/s, txRate=6B/s)")
+	assertEqual(t, got.Summary, "NETSnapshot(at=1970-01-01T09:00:15+09:00, ifaces=2, rxRate=22B/s, txRate=6B/s)")
 }
 
 func TestConnCapturer(t *testing.T) {
@@ -67,7 +67,7 @@ func TestConnCapturer(t *testing.T) {
 
 	got, err := c.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "ConnSnapshot(empty)")
+	assertEqual(t, got.Summary, "ConnSnapshot(empty)")
 
 	t.Run("propagates connection errors", func(t *testing.T) {
 		c2 := &miniedr.ConnCapturer{
@@ -107,12 +107,12 @@ func TestConnCapturer(t *testing.T) {
 	assertError(t, c.Capture(), "")
 	got, err = c.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "ConnSnapshot(at=1970-01-01T09:00:00+09:00, kind=all, conns=2, new=0, dead=0)")
+	assertEqual(t, got.Summary, "ConnSnapshot(at=1970-01-01T09:00:00+09:00, kind=all, conns=2, new=0, dead=0)")
 
 	assertError(t, c.Capture(), "")
 	got, err = c.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "ConnSnapshot(at=1970-01-01T09:00:05+09:00, kind=all, conns=2, new=1, dead=1)")
+	assertEqual(t, got.Summary, "ConnSnapshot(at=1970-01-01T09:00:05+09:00, kind=all, conns=2, new=1, dead=1)")
 }
 
 func TestNETCapturerVerbose(t *testing.T) {

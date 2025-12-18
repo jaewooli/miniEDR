@@ -181,9 +181,9 @@ func (w *FileWatchCapturer) Capture() error {
 	return nil
 }
 
-func (w *FileWatchCapturer) GetInfo() (string, error) {
+func (w *FileWatchCapturer) GetInfo() (InfoData, error) {
 	if w.curr == nil {
-		return "FileWatchSnapshot(empty)", nil
+		return InfoData{Summary: "FileWatchSnapshot(empty)"}, nil
 	}
 	// short sample
 	sample := ""
@@ -194,13 +194,18 @@ func (w *FileWatchCapturer) GetInfo() (string, error) {
 			sample += fmt.Sprintf("(+%d)", len(w.curr.Events)-1)
 		}
 	}
-	return fmt.Sprintf(
+	summary := fmt.Sprintf(
 		"FileWatchSnapshot(at=%s, files=%d, events=%d%s)",
 		w.curr.At.Format(time.RFC3339),
 		len(w.curr.Files),
 		len(w.curr.Events),
 		sample,
-	), nil
+	)
+	metrics := map[string]float64{
+		"file.files":  float64(len(w.curr.Files)),
+		"file.events": float64(len(w.curr.Events)),
+	}
+	return InfoData{Summary: summary, Metrics: metrics}, nil
 }
 
 // GetVerboseInfo lists watch roots and recent file events.

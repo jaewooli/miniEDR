@@ -69,7 +69,7 @@ func TestMemSnapShot(t *testing.T) {
 	t.Run("getinfo empty memory snapshot", func(t *testing.T) {
 		got, err := memCapturer.GetInfo()
 		assertError(t, err, "")
-		assertEqual(t, got, "MEMSnapshot(empty)")
+		assertEqual(t, got.Summary, "MEMSnapshot(empty)")
 	})
 
 	t.Run("capture and getinfo", func(t *testing.T) {
@@ -84,7 +84,7 @@ func TestMemSnapShot(t *testing.T) {
 			swapSeq[0].Total, swapSeq[0].Used, float64(swapSeq[0].Used)/float64(swapSeq[0].Total)*100,
 			swapSeq[0].Free, swapSeq[0].Sin, swapSeq[0].Sout,
 		)
-		assertEqual(t, got, want)
+		assertEqual(t, got.Summary, want)
 
 		assertError(t, memCapturer.Capture(), "")
 		got, err = memCapturer.GetInfo()
@@ -97,7 +97,7 @@ func TestMemSnapShot(t *testing.T) {
 			swapSeq[1].Total, swapSeq[1].Used, float64(swapSeq[1].Used)/float64(swapSeq[1].Total)*100,
 			swapSeq[1].Free, swapSeq[1].Sin, swapSeq[1].Sout,
 		)
-		assertEqual(t, got, want)
+		assertEqual(t, got.Summary, want)
 	})
 
 	t.Run("error when VirtualFn nil", func(t *testing.T) {

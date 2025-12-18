@@ -8,8 +8,19 @@ import (
 	"strings"
 )
 
+// InfoData carries both human readable text and structured metrics to avoid downstream string parsing.
+// Summary should remain concise and stable for display/logging.
+type InfoData struct {
+	Summary string
+	// Metrics holds numeric values keyed by dotted names (e.g. "cpu.total_pct").
+	// Keeping it flat makes it easier for dashboards or alerts to consume without custom parsers.
+	Metrics map[string]float64
+	// Fields can carry non-numeric metadata if needed. Leave nil when unused.
+	Fields map[string]interface{}
+}
+
 type Info interface {
-	GetInfo() (string, error)
+	GetInfo() (InfoData, error)
 }
 
 // VerboseInfo can be implemented by capturers that can emit additional detail.

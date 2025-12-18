@@ -51,7 +51,7 @@ func (sm *SnapshotManager) GetInfo() (string, error) {
 				i, c, err,
 			)
 		}
-		fmt.Fprintf(&b, "- [%d] %T: %s\n", i, c, info)
+		fmt.Fprintf(&b, "- [%d] %T: %s\n", i, c, info.Summary)
 	}
 
 	return b.String(), nil

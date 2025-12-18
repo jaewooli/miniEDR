@@ -103,9 +103,9 @@ func (p *PersistCapturer) Capture() error {
 	return nil
 }
 
-func (p *PersistCapturer) GetInfo() (string, error) {
+func (p *PersistCapturer) GetInfo() (InfoData, error) {
 	if p.curr == nil {
-		return "PersistSnapshot(empty)", nil
+		return InfoData{Summary: "PersistSnapshot(empty)"}, nil
 	}
 	sources := len(p.curr.Sources)
 	var added, changed, removed int
@@ -118,10 +118,19 @@ func (p *PersistCapturer) GetInfo() (string, error) {
 	for _, ks := range p.curr.Removed {
 		removed += len(ks)
 	}
-	return fmt.Sprintf(
+
+	summary := fmt.Sprintf(
 		"PersistSnapshot(at=%s, sources=%d, added=%d, changed=%d, removed=%d)",
 		p.curr.At.Format(time.RFC3339), sources, added, changed, removed,
-	), nil
+	)
+	metrics := map[string]float64{
+		"persist.sources": float64(sources),
+		"persist.added":   float64(added),
+		"persist.changed": float64(changed),
+		"persist.removed": float64(removed),
+	}
+
+	return InfoData{Summary: summary, Metrics: metrics}, nil
 }
 
 // GetVerboseInfo returns per-source changes with sample keys.

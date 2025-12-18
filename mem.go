@@ -62,9 +62,9 @@ func (m *MEMCapturer) Capture() error {
 	return nil
 }
 
-func (m *MEMCapturer) GetInfo() (string, error) {
+func (m *MEMCapturer) GetInfo() (InfoData, error) {
 	if m.snapshot.Virtual == nil || m.snapshot.Swap == nil {
-		return "MEMSnapshot(empty)", nil
+		return InfoData{Summary: "MEMSnapshot(empty)"}, nil
 	}
 
 	v := m.snapshot.Virtual
@@ -74,14 +74,25 @@ func (m *MEMCapturer) GetInfo() (string, error) {
 	usedPct := float64(used) / float64(v.Total) * 100
 	swapPct := float64(s.Used) / float64(s.Total) * 100
 
-	return fmt.Sprintf(
+	summary := fmt.Sprintf(
 		memSnapshotText,
 		m.snapshot.At.Format(time.RFC3339),
 		v.Total, v.Available, used, usedPct,
 		v.Free, v.Buffers, v.Cached,
 		s.Total, s.Used, swapPct,
 		s.Free, s.Sin, s.Sout,
-	), nil
+	)
+
+	metrics := map[string]float64{
+		"mem.ram.total_bytes":  float64(v.Total),
+		"mem.ram.used_bytes":   float64(used),
+		"mem.ram.used_pct":     usedPct,
+		"mem.swap.total_bytes": float64(s.Total),
+		"mem.swap.used_bytes":  float64(s.Used),
+		"mem.swap.used_pct":    swapPct,
+	}
+
+	return InfoData{Summary: summary, Metrics: metrics}, nil
 }
 
 // GetVerboseInfo returns a richer breakdown of RAM/swap fields.

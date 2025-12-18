@@ -40,7 +40,7 @@ type DashboardServer struct {
 
 type dashboardItem struct {
 	Name    string
-	Info    string
+	Info    InfoData
 	Verbose string
 	Error   string
 	Changed bool
@@ -237,7 +237,7 @@ func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose b
 		}
 	}
 
-	payload := normalizePayload(item.Info) + "|" + normalizePayload(item.Verbose) + "|" + normalizePayload(item.Error)
+	payload := normalizePayload(item.Info.Summary) + "|" + metricsFingerprint(item.Info.Metrics) + "|" + normalizePayload(item.Verbose) + "|" + normalizePayload(item.Error)
 	d.mu.RLock()
 	prev := d.lastPayload[name]
 	d.mu.RUnlock()
@@ -256,7 +256,7 @@ func (d *DashboardServer) captureSingle(c Capturer, ref, title string, verbose b
 
 	entry := dashboardLogEntry{
 		At:      ref,
-		Info:    item.Info,
+		Info:    item.Info.Summary,
 		Verbose: item.Verbose,
 		Error:   item.Error,
 		Changed: item.Changed,
@@ -991,6 +991,37 @@ func normalizePayload(s string) string {
 	return out
 }
 
+func metricsFingerprint(m map[string]float64) string {
+	if len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&b, "%s=%.4f;", k, m[k])
+	}
+	return b.String()
+}
+
+func metricVal(m map[string]float64, key string) (float64, bool) {
+	if m == nil {
+		return 0, false
+	}
+	v, ok := m[key]
+	return v, ok
+}
+
+func metricInt(m map[string]float64, key string) int {
+	if v, ok := metricVal(m, key); ok {
+		return int(v)
+	}
+	return -1
+}
+
 func chartX(idx, total int) int {
 	if total <= 1 {
 		return 0
@@ -1000,27 +1031,44 @@ func chartX(idx, total int) int {
 	return idx * step
 }
 
-func deriveGraphs(name, info string) []graphInfo {
+func deriveGraphs(name string, info InfoData) []graphInfo {
 	up := strings.ToUpper(name)
 	var gs []graphInfo
 	switch {
 	case strings.Contains(up, "MEM"):
-		if pct, ok := extractPercent(info, `UsedApprox=[^()]*\(([\d\.]+)%\)`); ok {
+		if pct, ok := metricVal(info.Metrics, "mem.ram.used_pct"); ok {
+			gs = append(gs, graphInfo{Label: "RAM used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
+		} else if pct, ok := extractPercent(info.Summary, `UsedApprox=[^()]*\(([\d\.]+)%\)`); ok {
 			gs = append(gs, graphInfo{Label: "RAM used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
 		}
-		if pct, ok := extractPercent(info, `Swap: Total=[\d]+B Used=[\d]+B \(([\d\.]+)%\)`); ok {
+		if pct, ok := metricVal(info.Metrics, "mem.swap.used_pct"); ok {
+			gs = append(gs, graphInfo{Label: "Swap used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
+		} else if pct, ok := extractPercent(info.Summary, `Swap: Total=[\d]+B Used=[\d]+B \(([\d\.]+)%\)`); ok {
 			gs = append(gs, graphInfo{Label: "Swap used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
 		}
 	case strings.Contains(up, "CPU"):
-		if pct, ok := extractPercent(info, `totalUsage=([\d\.]+)%`); ok {
+		if pct, ok := metricVal(info.Metrics, "cpu.total_pct"); ok {
+			gs = append(gs, graphInfo{Label: "CPU avg", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
+		} else if pct, ok := extractPercent(info.Summary, `totalUsage=([\d\.]+)%`); ok {
 			gs = append(gs, graphInfo{Label: "CPU avg", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
 		}
 	case strings.Contains(up, "DISK"):
-		if pct, ok := extractPercent(info, `used=([\d\.]+)%`); ok {
+		if pct, ok := metricVal(info.Metrics, "disk.used_pct"); ok {
+			gs = append(gs, graphInfo{Label: "DISK used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
+		} else if pct, ok := extractPercent(info.Summary, `used=([\d\.]+)%`); ok {
 			gs = append(gs, graphInfo{Label: "DISK used", Value: pct, Display: clampGraphValue(pct), ValueText: fmt.Sprintf("%.1f%%", pct)})
 		}
 	case strings.Contains(up, "NET"):
-		if rx, tx, ok := extractRates(info); ok {
+		rx, rxOk := metricVal(info.Metrics, "net.rx_bytes_per_sec")
+		tx, txOk := metricVal(info.Metrics, "net.tx_bytes_per_sec")
+		if !rxOk || !txOk {
+			if rxStr, txStr, ok := extractRates(info.Summary); ok {
+				rx = rxStr
+				tx = txStr
+				rxOk, txOk = true, true
+			}
+		}
+		if rxOk && txOk {
 			total := rx + tx
 			// scale vs 10MB/s budget (closer to Task Manager small-host view)
 			pct := (total / (10 * 1024 * 1024)) * 100
@@ -1032,36 +1080,86 @@ func deriveGraphs(name, info string) []graphInfo {
 			gs = append(gs, graphInfo{Label: "NET\nthroughput", Value: pct, Display: pct, ValueText: rateText})
 		}
 	case strings.Contains(up, "CONN"):
-		total, _ := extractInt(info, `conns=([\d]+)`)
-		newCnt, _ := extractInt(info, `new=([\d]+)`)
-		deadCnt, _ := extractInt(info, `dead=([\d]+)`)
-		gs = append(gs,
-			countGauge("Conns", total),
-			countGauge("New conns", newCnt),
-			countGauge("Closed", deadCnt),
-		)
+		total := metricInt(info.Metrics, "conn.total")
+		newCnt := metricInt(info.Metrics, "conn.new")
+		deadCnt := metricInt(info.Metrics, "conn.dead")
+		if total == -1 {
+			total, _ = extractInt(info.Summary, `conns=([\d]+)`)
+		}
+		if newCnt == -1 {
+			newCnt, _ = extractInt(info.Summary, `new=([\d]+)`)
+		}
+		if deadCnt == -1 {
+			deadCnt, _ = extractInt(info.Summary, `dead=([\d]+)`)
+		}
+		if total >= 0 {
+			gs = append(gs, countGauge("Conns", total))
+		}
+		if newCnt >= 0 {
+			gs = append(gs, countGauge("New conns", newCnt))
+		}
+		if deadCnt >= 0 {
+			gs = append(gs, countGauge("Closed", deadCnt))
+		}
 	case strings.Contains(up, "FILEWATCH"):
-		if v, ok := extractInt(info, `events=([\d]+)`); ok {
+		v := metricInt(info.Metrics, "file.events")
+		if v == -1 {
+			if parsed, ok := extractInt(info.Summary, `events=([\d]+)`); ok {
+				v = parsed
+			}
+		}
+		if v >= 0 {
 			gs = append(gs, countGauge("File events", v))
 		}
 	case strings.Contains(up, "PROC"):
-		total, _ := extractInt(info, `procs=([\d]+)`)
-		newCnt, _ := extractInt(info, `new=([\d]+)`)
-		deadCnt, _ := extractInt(info, `dead=([\d]+)`)
-		gs = append(gs,
-			countGauge("Procs", total),
-			countGauge("New procs", newCnt),
-			countGauge("Dead procs", deadCnt),
-		)
+		total := metricInt(info.Metrics, "proc.total")
+		newCnt := metricInt(info.Metrics, "proc.new")
+		deadCnt := metricInt(info.Metrics, "proc.dead")
+		if total == -1 {
+			total, _ = extractInt(info.Summary, `procs=([\d]+)`)
+		}
+		if newCnt == -1 {
+			newCnt, _ = extractInt(info.Summary, `new=([\d]+)`)
+		}
+		if deadCnt == -1 {
+			deadCnt, _ = extractInt(info.Summary, `dead=([\d]+)`)
+		}
+		if total >= 0 {
+			gs = append(gs, countGauge("Procs", total))
+		}
+		if newCnt >= 0 {
+			gs = append(gs, countGauge("New procs", newCnt))
+		}
+		if deadCnt >= 0 {
+			gs = append(gs, countGauge("Dead procs", deadCnt))
+		}
 	case strings.Contains(up, "PERSIST"):
-		if v, ok := extractInt(info, `added=([\d]+)`); ok {
-			gs = append(gs, countGauge("Added", v))
+		added := metricInt(info.Metrics, "persist.added")
+		changed := metricInt(info.Metrics, "persist.changed")
+		removed := metricInt(info.Metrics, "persist.removed")
+		if added == -1 {
+			if v, ok := extractInt(info.Summary, `added=([\d]+)`); ok {
+				added = v
+			}
 		}
-		if v, ok := extractInt(info, `changed=([\d]+)`); ok {
-			gs = append(gs, countGauge("Changed", v))
+		if changed == -1 {
+			if v, ok := extractInt(info.Summary, `changed=([\d]+)`); ok {
+				changed = v
+			}
 		}
-		if v, ok := extractInt(info, `removed=([\d]+)`); ok {
-			gs = append(gs, countGauge("Removed", v))
+		if removed == -1 {
+			if v, ok := extractInt(info.Summary, `removed=([\d]+)`); ok {
+				removed = v
+			}
+		}
+		if added >= 0 {
+			gs = append(gs, countGauge("Added", added))
+		}
+		if changed >= 0 {
+			gs = append(gs, countGauge("Changed", changed))
+		}
+		if removed >= 0 {
+			gs = append(gs, countGauge("Removed", removed))
 		}
 	}
 	return gs
@@ -1090,11 +1188,11 @@ func extractInt(s, pattern string) (int, bool) {
 	re := regexp.MustCompile(pattern)
 	m := re.FindStringSubmatch(s)
 	if len(m) != 2 {
-		return 0, false
+		return -1, false
 	}
 	v, err := strconv.Atoi(m[1])
 	if err != nil {
-		return 0, false
+		return -1, false
 	}
 	return v, true
 }
@@ -1165,59 +1263,91 @@ func humanBytes(v float64) string {
 	}
 }
 
-func summarizeInfo(name, info string) string {
+func summarizeInfo(name string, info InfoData) string {
 	up := strings.ToUpper(name)
+	m := info.Metrics
+	summary := info.Summary
 	switch {
 	case strings.Contains(up, "CPU"):
-		avg := captureGroup(info, `totalUsage=([\d\.]+)%`)
-		cores := captureGroup(info, `(cpu0=[\d\.% ]+)`)
 		var parts []string
-		if avg != "" {
-			parts = append(parts, fmt.Sprintf("Avg %s", avg+"%"))
+		if avg, ok := metricVal(m, "cpu.total_pct"); ok {
+			parts = append(parts, fmt.Sprintf("Avg %.2f%%", avg))
+		} else if avg := captureGroup(summary, `totalUsage=([\d\.]+)%`); avg != "" {
+			parts = append(parts, fmt.Sprintf("Avg %s%%", avg))
 		}
-		if cores != "" {
+		if core0, ok := metricVal(m, "cpu.core0_pct"); ok {
+			parts = append(parts, fmt.Sprintf("cpu0=%.1f%%", core0))
+		} else if cores := captureGroup(summary, `(cpu0=[\d\.% ]+)`); cores != "" {
 			parts = append(parts, cores)
+		}
+		if len(parts) == 0 {
+			return summary
 		}
 		return strings.Join(parts, " · ")
 	case strings.Contains(up, "MEM"):
-		used := captureGroup(info, `UsedApprox=[^()]*\(([\d\.]+)%\)`)
-		total := captureGroup(info, `RAM: Total=([\d]+)B`)
-		swapUsed, swapPct := captureGroup2(info, `Swap: Total=[\d]+B Used=([\d]+)B \(([\d\.]+)%\)`)
 		var parts []string
-		if used != "" {
+		if used, ok := metricVal(m, "mem.ram.used_pct"); ok {
+			parts = append(parts, fmt.Sprintf("RAM %.2f%%", used))
+		} else if used := captureGroup(summary, `UsedApprox=[^()]*\(([\d\.]+)%\)`); used != "" {
 			parts = append(parts, fmt.Sprintf("RAM %s%%", used))
 		}
-		if total != "" {
+		if total, ok := metricVal(m, "mem.ram.total_bytes"); ok {
+			parts = append(parts, fmt.Sprintf("Total %s", humanBytes(total)))
+		} else if total := captureGroup(summary, `RAM: Total=([\d]+)B`); total != "" {
 			parts = append(parts, fmt.Sprintf("Total %s", humanBytesString(total)))
 		}
-		if swapUsed != "" {
-			parts = append(parts, fmt.Sprintf("Swap %s (%s%%)", humanBytesString(swapUsed), swapPct))
+		swapUsedVal, hasSwapUsed := metricVal(m, "mem.swap.used_bytes")
+		swapPctVal, hasSwapPct := metricVal(m, "mem.swap.used_pct")
+		swapUsedStr, swapPctStr := captureGroup2(summary, `Swap: Total=[\d]+B Used=([\d]+)B \(([\d\.]+)%\)`)
+		if hasSwapUsed {
+			if hasSwapPct {
+				parts = append(parts, fmt.Sprintf("Swap %s (%.2f%%)", humanBytes(swapUsedVal), swapPctVal))
+			} else {
+				parts = append(parts, fmt.Sprintf("Swap %s", humanBytes(swapUsedVal)))
+			}
+		} else if swapUsedStr != "" {
+			parts = append(parts, fmt.Sprintf("Swap %s (%s%%)", humanBytesString(swapUsedStr), swapPctStr))
+		}
+		if len(parts) == 0 {
+			return summary
 		}
 		return strings.Join(parts, " · ")
 	case strings.Contains(up, "DISK"):
-		used := captureGroup(info, `used=([\d\.]+)%`)
-		io := captureGroup(info, `ioRate=([^,]+)`)
 		var parts []string
-		if used != "" {
+		if used, ok := metricVal(m, "disk.used_pct"); ok {
+			parts = append(parts, fmt.Sprintf("Used %.2f%%", used))
+		} else if used := captureGroup(summary, `used=([\d\.]+)%`); used != "" {
 			parts = append(parts, fmt.Sprintf("Used %s%%", used))
 		}
-		if io != "" {
+		rRate, rOk := metricVal(m, "disk.read_bytes_per_sec")
+		wRate, wOk := metricVal(m, "disk.write_bytes_per_sec")
+		if rOk || wOk {
+			parts = append(parts, fmt.Sprintf("ioRate=read %s/s write %s/s", humanBytes(rRate), humanBytes(wRate)))
+		} else if io := captureGroup(summary, `ioRate=([^,]+)`); io != "" {
 			parts = append(parts, io)
+		}
+		if len(parts) == 0 {
+			return summary
 		}
 		return strings.Join(parts, " · ")
 	case strings.Contains(up, "NET"):
-		rx := captureGroup(info, `rxRate=([^,]+)`)
-		tx := captureGroup(info, `txRate=([^\)]+)`)
 		var parts []string
-		if rx != "" {
+		if rx, ok := metricVal(m, "net.rx_bytes_per_sec"); ok {
+			parts = append(parts, fmt.Sprintf("RX %s/s", humanBytes(rx)))
+		} else if rx := captureGroup(summary, `rxRate=([^,]+)`); rx != "" {
 			parts = append(parts, "RX "+rx)
 		}
-		if tx != "" {
+		if tx, ok := metricVal(m, "net.tx_bytes_per_sec"); ok {
+			parts = append(parts, fmt.Sprintf("TX %s/s", humanBytes(tx)))
+		} else if tx := captureGroup(summary, `txRate=([^\)]+)`); tx != "" {
 			parts = append(parts, "TX "+tx)
+		}
+		if len(parts) == 0 {
+			return summary
 		}
 		return strings.Join(parts, " · ")
 	default:
-		return info
+		return summary
 	}
 }
 

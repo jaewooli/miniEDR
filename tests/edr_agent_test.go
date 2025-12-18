@@ -13,7 +13,7 @@ import (
 
 type stubEDRCapturer struct {
 	captureErr error
-	info       string
+	info       miniedr.InfoData
 	infoErr    error
 	capCalls   int
 	infoCalls  int
@@ -24,7 +24,7 @@ func (s *stubEDRCapturer) Capture() error {
 	return s.captureErr
 }
 
-func (s *stubEDRCapturer) GetInfo() (string, error) {
+func (s *stubEDRCapturer) GetInfo() (miniedr.InfoData, error) {
 	s.infoCalls++
 	return s.info, s.infoErr
 }
@@ -32,7 +32,7 @@ func (s *stubEDRCapturer) GetInfo() (string, error) {
 func TestEDRAgentRun(t *testing.T) {
 	t.Run("runs until context done", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		stub := &stubEDRCapturer{info: "ok"}
+		stub := &stubEDRCapturer{info: miniedr.InfoData{Summary: "ok"}}
 		agent := miniedr.NewEDRAgent([]miniedr.CapturerSchedule{
 			{Capturer: stub, Interval: 5 * time.Millisecond},
 		})
@@ -53,7 +53,7 @@ func TestEDRAgentRun(t *testing.T) {
 
 	t.Run("returns capture error immediately", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		stub := &stubEDRCapturer{captureErr: errors.New("kaput"), info: "ok"}
+		stub := &stubEDRCapturer{captureErr: errors.New("kaput"), info: miniedr.InfoData{Summary: "ok"}}
 		agent := miniedr.NewEDRAgent([]miniedr.CapturerSchedule{
 			{Capturer: stub, Interval: 5 * time.Millisecond},
 		})

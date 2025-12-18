@@ -136,9 +136,9 @@ func (c *ProcCapturer) Capture() error {
 	return nil
 }
 
-func (c *ProcCapturer) GetInfo() (string, error) {
+func (c *ProcCapturer) GetInfo() (InfoData, error) {
 	if c.curr == nil {
-		return "ProcSnapshot(empty)\n", nil
+		return InfoData{Summary: "ProcSnapshot(empty)"}, nil
 	}
 	// show up to 3 new procs in short form
 	var examples []string
@@ -163,14 +163,20 @@ func (c *ProcCapturer) GetInfo() (string, error) {
 		}
 	}
 
-	return fmt.Sprintf(
+	summary := fmt.Sprintf(
 		"ProcSnapshot(at=%s, procs=%d, new=%d, dead=%d%s)",
 		c.curr.At.Format(time.RFC3339),
 		len(c.curr.Procs),
 		len(c.curr.NewPIDs),
 		len(c.curr.DeadPIDs),
 		exStr,
-	), nil
+	)
+	metrics := map[string]float64{
+		"proc.total": float64(len(c.curr.Procs)),
+		"proc.new":   float64(len(c.curr.NewPIDs)),
+		"proc.dead":  float64(len(c.curr.DeadPIDs)),
+	}
+	return InfoData{Summary: summary, Metrics: metrics}, nil
 }
 
 // GetVerboseInfo returns detailed lists of new/dead processes.

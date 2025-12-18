@@ -76,10 +76,12 @@ func (d *DISKCapturer) Capture() error {
 	return nil
 }
 
-func (d *DISKCapturer) GetInfo() (string, error) {
+func (d *DISKCapturer) GetInfo() (InfoData, error) {
 	if d.curr == nil {
-		return "DISKSnapshot(empty)", nil
+		return InfoData{Summary: "DISKSnapshot(empty)"}, nil
 	}
+
+	metrics := make(map[string]float64)
 
 	// Usage 요약: 첫 path 기준으로 보여주기(너무 길어지는 걸 방지)
 	usageSummary := "n/a"
@@ -87,6 +89,9 @@ func (d *DISKCapturer) GetInfo() (string, error) {
 		p := d.Paths[0]
 		if u := d.curr.Usage[p]; u != nil && u.Total > 0 {
 			usageSummary = fmt.Sprintf("%s used=%.2f%% (%d/%dB)", p, u.UsedPercent, u.Used, u.Total)
+			metrics["disk.used_pct"] = u.UsedPercent
+			metrics["disk.total_bytes"] = float64(u.Total)
+			metrics["disk.used_bytes"] = float64(u.Used)
 		}
 	}
 
@@ -108,20 +113,29 @@ func (d *DISKCapturer) GetInfo() (string, error) {
 					wDelta += cur.WriteBytes - prev.WriteBytes
 				}
 			}
+			rRate := float64(rDelta) / sec
+			wRate := float64(wDelta) / sec
 			ioSummary = fmt.Sprintf("ioRate=read %dB/s write %dB/s",
-				uint64(float64(rDelta)/sec),
-				uint64(float64(wDelta)/sec),
+				uint64(rRate),
+				uint64(wRate),
 			)
+			metrics["disk.read_bytes_per_sec"] = rRate
+			metrics["disk.write_bytes_per_sec"] = wRate
 		}
 	}
 
-	return fmt.Sprintf(
+	summary := fmt.Sprintf(
 		"DISKSnapshot(at=%s, %s, %s, devices=%d)",
 		d.curr.At.Format(time.RFC3339),
 		usageSummary,
 		ioSummary,
 		len(d.curr.IO),
-	), nil
+	)
+
+	if len(metrics) == 0 {
+		metrics = nil
+	}
+	return InfoData{Summary: summary, Metrics: metrics}, nil
 }
 
 // GetVerboseInfo returns per-path usage and per-device IO deltas.

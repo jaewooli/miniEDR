@@ -15,7 +15,7 @@ func TestDISKCapturer(t *testing.T) {
 
 	got, err := d.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "DISKSnapshot(empty)")
+	assertEqual(t, got.Summary, "DISKSnapshot(empty)")
 
 	t.Run("error when UsageFn nil", func(t *testing.T) {
 		d2 := &miniedr.DISKCapturer{
@@ -62,12 +62,12 @@ func TestDISKCapturer(t *testing.T) {
 	assertError(t, d.Capture(), "")
 	got, err = d.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "DISKSnapshot(at=1970-01-01T09:00:10+09:00, /mnt used=50.00% (500/1000B), ioRate=n/a, devices=1)")
+	assertEqual(t, got.Summary, "DISKSnapshot(at=1970-01-01T09:00:10+09:00, /mnt used=50.00% (500/1000B), ioRate=n/a, devices=1)")
 
 	assertError(t, d.Capture(), "")
 	got, err = d.GetInfo()
 	assertError(t, err, "")
-	assertEqual(t, got, "DISKSnapshot(at=1970-01-01T09:00:20+09:00, /mnt used=50.00% (500/1000B), ioRate=read 20B/s write 30B/s, devices=1)")
+	assertEqual(t, got.Summary, "DISKSnapshot(at=1970-01-01T09:00:20+09:00, /mnt used=50.00% (500/1000B), ioRate=read 20B/s write 30B/s, devices=1)")
 }
 
 func TestDISKCapturerVerbose(t *testing.T) {
