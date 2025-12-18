@@ -134,6 +134,33 @@ func TestEDRAgentRun(t *testing.T) {
 		}
 	})
 
+	t.Run("runs detection and responders", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		stub := &stubEDRCapturer{info: capturer.InfoData{
+			Summary: "cpu",
+			Metrics: map[string]float64{"cpu.total_pct": 95},
+			Meta:    capturer.TelemetryMeta{Capturer: "CPU"},
+		}}
+		edrAgent := agent.NewCollectAgent([]miniedr.CapturerSchedule{
+			{Capturer: stub, Interval: 5 * time.Millisecond},
+		})
+		edrAgent.Out = buf
+		edrAgent.Detector = &miniedr.Detector{Rules: []miniedr.Rule{miniedr.RuleCPUHigh(90)}}
+		logBuf := &bytes.Buffer{}
+		edrAgent.AddResponder(&miniedr.LogResponder{Out: logBuf})
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Millisecond)
+		defer cancel()
+
+		_ = edrAgent.Run(ctx)
+
+		if logBuf.Len() == 0 {
+			t.Fatalf("expected responder to log alert")
+		}
+		if !strings.Contains(logBuf.String(), "cpu.high_usage") {
+			t.Fatalf("expected rule id in log, got %q", logBuf.String())
+		}
+	})
+
 	t.Run("records sink errors and stats", func(t *testing.T) {
 		buf := &bytes.Buffer{}
 		stub := &stubEDRCapturer{info: capturer.InfoData{Summary: "ok"}}

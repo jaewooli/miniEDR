@@ -32,6 +32,8 @@ type CollectAgent struct {
 	timezone  string
 	sessionID string
 	Sinks     []miniedr.TelemetrySink
+	Detector  *miniedr.Detector
+	Responder *miniedr.ResponderPipeline
 
 	mu        sync.Mutex
 	Errs      []error
@@ -157,6 +159,20 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer, interval time.Duration) 
 		a.recordSinkResult(sink, nil)
 	}
 
+	// detection & response pipeline
+	var alerts []miniedr.Alert
+	if a.Detector != nil {
+		alerts = a.Detector.Evaluate(info)
+	}
+	if len(alerts) > 0 && a.Responder != nil {
+		if errs := a.Responder.Run(alerts); len(errs) > 0 {
+			for _, er := range errs {
+				fmt.Fprintf(a.Out, "[%s] responder error: %v\n", capturer.CapturerName(c), er)
+				a.recordErr(er)
+			}
+		}
+	}
+
 	fmt.Fprintf(a.Out, "[%s] %s\n", capturer.CapturerName(c), info.Summary)
 
 	if a.Verbose {
@@ -188,6 +204,17 @@ func (a *CollectAgent) AddSink(s miniedr.TelemetrySink) {
 		return
 	}
 	a.Sinks = append(a.Sinks, s)
+}
+
+// AddResponder registers an alert responder for detections.
+func (a *CollectAgent) AddResponder(r miniedr.AlertResponder) {
+	if r == nil {
+		return
+	}
+	if a.Responder == nil {
+		a.Responder = &miniedr.ResponderPipeline{}
+	}
+	a.Responder.Responders = append(a.Responder.Responders, r)
 }
 
 func (a *CollectAgent) recordErr(err error) {
