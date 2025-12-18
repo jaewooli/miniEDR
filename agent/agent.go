@@ -32,9 +32,7 @@ type CollectAgent struct {
 	timezone  string
 	sessionID string
 	Sinks     []miniedr.TelemetrySink
-	Detector  *miniedr.Detector
-	Responder *miniedr.ResponderPipeline
-	Router    *miniedr.ResponseRouter
+	Pipeline  *miniedr.AlertPipeline
 
 	mu        sync.Mutex
 	Errs      []error
@@ -161,17 +159,14 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer, interval time.Duration) 
 	}
 
 	// detection & response pipeline
-	var alerts []miniedr.Alert
-	if a.Detector != nil {
-		alerts = a.Detector.Evaluate(info)
-	}
-	if len(alerts) > 0 {
-		errs := a.runResponders(alerts)
-		if len(errs) > 0 {
-			for _, er := range errs {
-				fmt.Fprintf(a.Out, "[%s] responder error: %v\n", capturer.CapturerName(c), er)
-				a.recordErr(er)
-			}
+	if a.Pipeline != nil {
+		alerts, errs := a.Pipeline.Process(info)
+		for _, er := range errs {
+			fmt.Fprintf(a.Out, "[%s] responder error: %v\n", capturer.CapturerName(c), er)
+			a.recordErr(er)
+		}
+		if len(alerts) > 0 && a.Verbose {
+			fmt.Fprintf(a.Out, "[%s] alerts: %d\n", capturer.CapturerName(c), len(alerts))
 		}
 	}
 
@@ -213,17 +208,13 @@ func (a *CollectAgent) AddResponder(r miniedr.AlertResponder) {
 	if r == nil {
 		return
 	}
-	if a.Router != nil {
-		if a.Router.Pipeline == nil {
-			a.Router.Pipeline = &miniedr.ResponderPipeline{}
-		}
-		a.Router.Pipeline.Responders = append(a.Router.Pipeline.Responders, r)
-		return
+	if a.Pipeline == nil {
+		a.Pipeline = &miniedr.AlertPipeline{}
 	}
-	if a.Responder == nil {
-		a.Responder = &miniedr.ResponderPipeline{}
+	if a.Pipeline.Responder == nil {
+		a.Pipeline.Responder = &miniedr.ResponderPipeline{}
 	}
-	a.Responder.Responders = append(a.Responder.Responders, r)
+	a.Pipeline.Responder.Responders = append(a.Pipeline.Responder.Responders, r)
 }
 
 func (a *CollectAgent) recordErr(err error) {
@@ -297,14 +288,4 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
-}
-
-func (a *CollectAgent) runResponders(alerts []miniedr.Alert) []error {
-	if a.Router != nil {
-		return a.Router.Run(alerts)
-	}
-	if a.Responder != nil {
-		return a.Responder.Run(alerts)
-	}
-	return nil
 }

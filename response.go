@@ -13,8 +13,10 @@ type PolicyEngine struct {
 	DenyRules   []string
 	Cooldown    time.Duration // per alert dedup key
 
-	mu   sync.Mutex
-	last map[string]time.Time
+	mu       sync.Mutex
+	last     map[string]time.Time
+	allowSet map[string]struct{}
+	denySet  map[string]struct{}
 }
 
 // ShouldRespond returns true if the alert passes policy checks.
@@ -22,10 +24,10 @@ func (p *PolicyEngine) ShouldRespond(a Alert) bool {
 	if p == nil {
 		return true
 	}
-	if inList(a.RuleID, p.DenyRules) {
+	if p.initSets(); p.inSet(a.RuleID, p.denySet) {
 		return false
 	}
-	if len(p.AllowRules) > 0 && !inList(a.RuleID, p.AllowRules) {
+	if len(p.allowSet) > 0 && !p.inSet(a.RuleID, p.allowSet) {
 		return false
 	}
 	if p.MinSeverity != "" && severityRank(a.Severity) < severityRank(p.MinSeverity) {
@@ -47,6 +49,33 @@ func (p *PolicyEngine) ShouldRespond(a Alert) bool {
 		p.last[key] = time.Now().Add(p.Cooldown)
 	}
 	return true
+}
+
+func (p *PolicyEngine) initSets() bool {
+	if p.allowSet != nil || p.denySet != nil {
+		return true
+	}
+	if len(p.AllowRules) > 0 {
+		p.allowSet = make(map[string]struct{}, len(p.AllowRules))
+		for _, r := range p.AllowRules {
+			p.allowSet[r] = struct{}{}
+		}
+	}
+	if len(p.DenyRules) > 0 {
+		p.denySet = make(map[string]struct{}, len(p.DenyRules))
+		for _, r := range p.DenyRules {
+			p.denySet[r] = struct{}{}
+		}
+	}
+	return true
+}
+
+func (p *PolicyEngine) inSet(val string, set map[string]struct{}) bool {
+	if set == nil {
+		return false
+	}
+	_, ok := set[val]
+	return ok
 }
 
 // ResponseRouter filters alerts via policy then fans out to responders.
@@ -75,15 +104,6 @@ func (r *ResponseRouter) Run(alerts []Alert) []error {
 		return []error{fmt.Errorf("response router: pipeline is nil")}
 	}
 	return r.Pipeline.Run(filtered)
-}
-
-func inList(val string, list []string) bool {
-	for _, v := range list {
-		if v == val {
-			return true
-		}
-	}
-	return false
 }
 
 func severityRank(s AlertSeverity) int {

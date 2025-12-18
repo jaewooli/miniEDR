@@ -44,6 +44,8 @@ type RuleSpec struct {
 	Description string
 	Severity    AlertSeverity
 	Tags        []string
+	Source      string // optional capturer name this rule targets
+	DedupKey    string // optional fixed dedup key
 	Eval        func(info capturer.InfoData) []Alert
 }
 
@@ -118,11 +120,18 @@ func (d *Detector) enrichAlert(a Alert, info capturer.InfoData, r RuleSpec) Aler
 			a.Title = a.RuleID
 		}
 	}
+	if a.Source == "" && r.Source != "" {
+		a.Source = r.Source
+	}
 	if a.Evidence == nil && len(r.Tags) > 0 {
 		a.Evidence = map[string]any{"tags": r.Tags}
 	}
 	if a.DedupKey == "" {
-		a.DedupKey = fmt.Sprintf("%s|%s|%s", a.RuleID, a.Source, a.Meta.Session)
+		if r.DedupKey != "" {
+			a.DedupKey = r.DedupKey
+		} else {
+			a.DedupKey = fmt.Sprintf("%s|%s|%s", a.RuleID, a.Source, a.Meta.Session)
+		}
 	}
 	return a
 }

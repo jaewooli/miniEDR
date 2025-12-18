@@ -1,10 +1,6 @@
 package miniedr
 
-import (
-	"fmt"
-
-	"github.com/jaewooli/miniedr/capturer"
-)
+import "github.com/jaewooli/miniedr/capturer"
 
 // AlertPipeline glues detection and response together.
 // It evaluates rules on an InfoData and then runs responses with optional policy.
@@ -32,5 +28,6 @@ func (p *AlertPipeline) Process(info capturer.InfoData) ([]Alert, []error) {
 		errs := p.Responder.Run(alerts)
 		return alerts, errs
 	}
-	return alerts, []error{fmt.Errorf("alert pipeline: no responder/router configured")}
+	// no responders configured; return alerts for callers to inspect
+	return alerts, nil
 }

@@ -40,7 +40,7 @@ func TestAlertPipelineMissingResponder(t *testing.T) {
 	if len(alerts) != 1 {
 		t.Fatalf("expected alert emitted")
 	}
-	if len(errs) != 1 {
-		t.Fatalf("expected missing responder error")
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors when no responders, got %v", errs)
 	}
 }
