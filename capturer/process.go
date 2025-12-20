@@ -186,12 +186,16 @@ func (c *ProcCapturer) GetVerboseInfo() (string, error) {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "ProcSnapshot(at=%s, total=%d, new=%d, dead=%d)\n",
-		c.curr.At.Format(time.RFC3339),
-		len(c.curr.Procs),
-		len(c.curr.NewPIDs),
-		len(c.curr.DeadPIDs),
-	)
+	prevTotal := 0
+	if c.prev != nil {
+		prevTotal = len(c.prev.Procs)
+	}
+	delta := len(c.curr.Procs) - prevTotal
+	fmt.Fprintf(&b, "ProcSnapshot(at=%s, total=%d", c.curr.At.Format(time.RFC3339), len(c.curr.Procs))
+	if c.prev != nil {
+		fmt.Fprintf(&b, ", prev=%d, delta=%+d", prevTotal, delta)
+	}
+	fmt.Fprintf(&b, ", new=%d, dead=%d)\n", len(c.curr.NewPIDs), len(c.curr.DeadPIDs))
 
 	if len(c.curr.NewPIDs) > 0 {
 		fmt.Fprintf(&b, "New:\n")

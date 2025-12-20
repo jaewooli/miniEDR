@@ -166,9 +166,10 @@ func TestFileChangeCapturerVerbose(t *testing.T) {
 	got, err := w.GetVerboseInfo()
 	assertError(t, err, "")
 	want := "" +
-		"FileChangeSnapshot(at=1970-01-01T09:00:20+09:00, paths=1, files=2, events=2, maxFiles=10)\n" +
+		"FileChangeSnapshot(at=1970-01-01T09:00:20+09:00, paths=1, files=2, prevFiles=1, deltaFiles=+1, events=2 (prev=0, delta=+2), maxFiles=10)\n" +
 		"Roots: /root\n" +
 		"Extensions: .txt\n" +
+		"EventTypes: created=1 modified=1 deleted=0\n" +
 		"Events:\n" +
 		"- created /root/b.txt size=3 mode=-rw------- mtime=1970-01-01T09:00:07+09:00\n" +
 		"- modified /root/a.txt size=2 mode=-rw-r--r-- mtime=1970-01-01T09:00:06+09:00"

@@ -166,7 +166,8 @@ func TestNETCapturerVerbose(t *testing.T) {
 	got, err := n.GetVerboseInfo()
 	assertError(t, err, "")
 	want := "" +
-		"NETSnapshot(at=1970-01-01T09:00:15+09:00)\n" +
+		"NETSnapshot(at=1970-01-01T09:00:15+09:00, interval=5s)\n" +
+		"Interfaces: total=1 (prev=1, delta=+0) rxRate=20B/s txRate=8B/s\n" +
 		"- eth0 rx=20B/s tx=8B/s pkts=4.0/2.0 per sec err=1/1 drop=1/2"
 	assertEqual(t, got, want)
 }
@@ -208,8 +209,10 @@ func TestConnCapturerVerbose(t *testing.T) {
 	got, err := c.GetVerboseInfo()
 	assertError(t, err, "")
 	want := "" +
-		"ConnSnapshot(at=1970-01-01T09:00:05+09:00, kind=all, total=2)\n" +
-		"States: ESTABLISHED=2\n" +
+		"ConnSnapshot(at=1970-01-01T09:00:05+09:00, kind=all, total=2, prev=2, delta=+0)\n" +
+		"Churn: new=1 dead=1\n" +
+		"States: ESTABLISHED=2(+1)\n" +
+		"Protocols: tcp=1 udp=1\n" +
 		"New:\n" +
 		"- tcp pid=30 192.168.1.2:8080 -> 8.8.8.8:53 status=ESTABLISHED\n" +
 		"Closed:\n" +

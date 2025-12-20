@@ -57,7 +57,7 @@ func TestProcCapturerVerbose(t *testing.T) {
 	got, err := c.GetVerboseInfo()
 	assertError(t, err, "")
 	want := "" +
-		"ProcSnapshot(at=1970-01-01T09:00:20+09:00, total=2, new=1, dead=1)\n" +
+		"ProcSnapshot(at=1970-01-01T09:00:20+09:00, total=2, prev=2, delta=+0, new=1, dead=1)\n" +
 		"New:\n" +
 		"- pid=3 ppid=1 name=proc3 exe=/bin/proc3 cmd=proc3 --flag started=1970-01-01T09:00:20+09:00\n" +
 		"Dead:\n" +

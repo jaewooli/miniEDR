@@ -249,14 +249,12 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 			}
 			item.Info = info
 			item.Meta = info.Meta
-			if verbose {
-				if vc, ok := c.(capturer.VerboseInfo); ok {
-					verb, err := vc.GetVerboseInfo()
-					if err != nil {
-						item.Error = fmt.Sprintf("getverboseinfo error: %v", err)
-					} else {
-						item.Verbose = verb
-					}
+			if vc, ok := c.(capturer.VerboseInfo); ok {
+				verb, err := vc.GetVerboseInfo()
+				if err != nil {
+					item.Error = fmt.Sprintf("getverboseinfo error: %v", err)
+				} else {
+					item.Verbose = verb
 				}
 			}
 			netScale := d.updateNetScale(name, item.Info)
@@ -857,10 +855,10 @@ small {
               <div class="summary">{{.Display}}</div>
             </div>
             {{if .Verbose}}
-            <div>
-              <small>verbose</small>
+            <details class="detail-box">
+              <summary>Verbose</summary>
               <pre>{{.Verbose}}</pre>
-            </div>
+            </details>
             {{end}}
             {{if .Logs}}
             {{ $item := . }}

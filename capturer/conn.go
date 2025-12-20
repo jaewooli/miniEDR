@@ -163,20 +163,36 @@ func (c *ConnCapturer) GetVerboseInfo() (string, error) {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "ConnSnapshot(at=%s, kind=%s, total=%d)\n", c.curr.At.Format(time.RFC3339), c.Kind, len(c.curr.Conns))
+	prevTotal := 0
+	if c.prev != nil {
+		prevTotal = len(c.prev.Conns)
+	}
+	delta := len(c.curr.Conns) - prevTotal
+	fmt.Fprintf(&b, "ConnSnapshot(at=%s, kind=%s, total=%d", c.curr.At.Format(time.RFC3339), c.Kind, len(c.curr.Conns))
+	if c.prev != nil {
+		fmt.Fprintf(&b, ", prev=%d, delta=%+d", prevTotal, delta)
+	}
+	fmt.Fprintf(&b, ")\n")
+	fmt.Fprintf(&b, "Churn: new=%d dead=%d\n", len(c.curr.New), len(c.curr.Dead))
 
 	// State distribution
 	if len(c.curr.Conns) > 0 {
-		stateCnt := make(map[string]int)
-		for _, cs := range c.curr.Conns {
-			stateCnt[cs.Status]++
+		currStates := countConnStates(c.curr.Conns)
+		prevStates := countConnStates(c.prevConns())
+		stateLines := formatCountDelta(currStates, prevStates)
+		if len(stateLines) > 0 {
+			fmt.Fprintf(&b, "States: %s\n", strings.Join(stateLines, " "))
 		}
-		states := make([]string, 0, len(stateCnt))
-		for st, n := range stateCnt {
-			states = append(states, fmt.Sprintf("%s=%d", st, n))
+	}
+
+	// Protocol distribution
+	if len(c.curr.Conns) > 0 {
+		currProto := countConnProtos(c.curr.Conns)
+		prevProto := countConnProtos(c.prevConns())
+		protoLines := formatProtoDelta(currProto, prevProto)
+		if len(protoLines) > 0 {
+			fmt.Fprintf(&b, "Protocols: %s\n", strings.Join(protoLines, " "))
 		}
-		sort.Strings(states)
-		fmt.Fprintf(&b, "States: %s\n", strings.Join(states, " "))
 	}
 
 	if len(c.curr.New) > 0 {
@@ -241,6 +257,83 @@ func formatConnIDs(ids []ConnID, source map[ConnID]gnet.ConnectionStat, limit in
 
 func connIDKey(id ConnID) string {
 	return fmt.Sprintf("%d|%d|%d|%s|%s|%d|%s|%d", id.Family, id.Type, id.PID, id.Status, id.LIP, id.LPort, id.RIP, id.RPort)
+}
+
+func countConnStates(conns map[ConnID]gnet.ConnectionStat) map[string]int {
+	if len(conns) == 0 {
+		return nil
+	}
+	out := make(map[string]int)
+	for _, cs := range conns {
+		out[cs.Status]++
+	}
+	return out
+}
+
+func countConnProtos(conns map[ConnID]gnet.ConnectionStat) map[ConnProto]int {
+	if len(conns) == 0 {
+		return nil
+	}
+	out := make(map[ConnProto]int)
+	for _, cs := range conns {
+		out[connProtoFromType(cs.Type)]++
+	}
+	return out
+}
+
+func formatCountDelta(cur map[string]int, prev map[string]int) []string {
+	if len(cur) == 0 {
+		return nil
+	}
+	var prevCounts map[string]int
+	if prev != nil {
+		prevCounts = prev
+	}
+	var out []string
+	keys := make([]string, 0, len(cur))
+	for k := range cur {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		curVal := cur[k]
+		line := fmt.Sprintf("%s=%d", k, curVal)
+		if prevCounts != nil {
+			prevVal := prevCounts[k]
+			if d := curVal - prevVal; d != 0 {
+				line = fmt.Sprintf("%s=%d(%+d)", k, curVal, d)
+			}
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+func formatProtoDelta(cur map[ConnProto]int, prev map[ConnProto]int) []string {
+	if len(cur) == 0 {
+		return nil
+	}
+	var prevCounts map[ConnProto]int
+	if prev != nil {
+		prevCounts = prev
+	}
+	var out []string
+	keys := make([]ConnProto, 0, len(cur))
+	for k := range cur {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	for _, k := range keys {
+		curVal := cur[k]
+		line := fmt.Sprintf("%s=%d", k, curVal)
+		if prevCounts != nil {
+			if d := curVal - prevCounts[k]; d != 0 {
+				line = fmt.Sprintf("%s=%d(%+d)", k, curVal, d)
+			}
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 func connProtoFromType(t uint32) ConnProto {

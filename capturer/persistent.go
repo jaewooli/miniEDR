@@ -140,7 +140,15 @@ func (p *PersistCapturer) GetVerboseInfo() (string, error) {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "PersistSnapshot(at=%s)\n", p.curr.At.Format(time.RFC3339))
+	prevSources := 0
+	if p.prev != nil {
+		prevSources = len(p.prev.Sources)
+	}
+	fmt.Fprintf(&b, "PersistSnapshot(at=%s, sources=%d", p.curr.At.Format(time.RFC3339), len(p.curr.Sources))
+	if p.prev != nil {
+		fmt.Fprintf(&b, ", prev=%d, delta=%+d", prevSources, len(p.curr.Sources)-prevSources)
+	}
+	fmt.Fprintf(&b, ")\n")
 
 	names := make([]string, 0, len(p.curr.Sources))
 	for name := range p.curr.Sources {
@@ -152,8 +160,15 @@ func (p *PersistCapturer) GetVerboseInfo() (string, error) {
 		added := p.curr.Added[name]
 		changed := p.curr.Changed[name]
 		removed := p.curr.Removed[name]
-		fmt.Fprintf(&b, "- %s entries=%d added=%d changed=%d removed=%d\n",
-			name, len(p.curr.Sources[name]), len(added), len(changed), len(removed))
+		prevEntries := 0
+		if p.prev != nil && p.prev.Sources != nil {
+			prevEntries = len(p.prev.Sources[name])
+		}
+		fmt.Fprintf(&b, "- %s entries=%d", name, len(p.curr.Sources[name]))
+		if p.prev != nil {
+			fmt.Fprintf(&b, " (prev=%d, delta=%+d)", prevEntries, len(p.curr.Sources[name])-prevEntries)
+		}
+		fmt.Fprintf(&b, " added=%d changed=%d removed=%d\n", len(added), len(changed), len(removed))
 
 		printKeys := func(label string, keys []string) {
 			if len(keys) == 0 {

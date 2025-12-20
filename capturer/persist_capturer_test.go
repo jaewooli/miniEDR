@@ -95,8 +95,8 @@ func TestPersistCapturerVerbose(t *testing.T) {
 	got, err := p.GetVerboseInfo()
 	assertError(t, err, "")
 	want := "" +
-		"PersistSnapshot(at=1970-01-01T09:00:20+09:00)\n" +
-		"- stub entries=2 added=1 changed=0 removed=1\n" +
+		"PersistSnapshot(at=1970-01-01T09:00:20+09:00, sources=1, prev=1, delta=+0)\n" +
+		"- stub entries=2 (prev=2, delta=+0) added=1 changed=0 removed=1\n" +
 		"  added: c\n" +
 		"  removed: b"
 	assertEqual(t, got, want)

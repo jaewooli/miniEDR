@@ -145,7 +145,29 @@ func (d *DISKCapturer) GetVerboseInfo() (string, error) {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "DISKSnapshot(at=%s)\n", d.curr.At.Format(time.RFC3339))
+	fmt.Fprintf(&b, "DISKSnapshot(at=%s", d.curr.At.Format(time.RFC3339))
+	if d.prev != nil {
+		fmt.Fprintf(&b, ", interval=%s", d.curr.At.Sub(d.prev.At).Round(time.Millisecond))
+	}
+	fmt.Fprintf(&b, ")\n")
+
+	if d.curr != nil {
+		prevPaths := 0
+		prevIO := 0
+		if d.prev != nil {
+			prevPaths = len(d.prev.Usage)
+			prevIO = len(d.prev.IO)
+		}
+		fmt.Fprintf(&b, "Summary: paths=%d", len(d.curr.Usage))
+		if d.prev != nil {
+			fmt.Fprintf(&b, " (prev=%d, delta=%+d)", prevPaths, len(d.curr.Usage)-prevPaths)
+		}
+		fmt.Fprintf(&b, " devices=%d", len(d.curr.IO))
+		if d.prev != nil {
+			fmt.Fprintf(&b, " (prev=%d, delta=%+d)", prevIO, len(d.curr.IO)-prevIO)
+		}
+		fmt.Fprintf(&b, "\n")
+	}
 
 	// Paths usage detail
 	if len(d.curr.Usage) > 0 {

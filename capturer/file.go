@@ -219,19 +219,36 @@ func (w *FileChangeCapturer) GetVerboseInfo() (string, error) {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "FileChangeSnapshot(at=%s, paths=%d, files=%d, events=%d, maxFiles=%d)\n",
-		w.curr.At.Format(time.RFC3339),
-		len(w.Paths),
-		len(w.curr.Files),
-		len(w.curr.Events),
-		w.MaxFiles,
-	)
+	prevFiles := 0
+	prevEvents := 0
+	if w.prev != nil {
+		prevFiles = len(w.prev.Files)
+		prevEvents = len(w.prev.Events)
+	}
+	fmt.Fprintf(&b, "FileChangeSnapshot(at=%s, paths=%d, files=%d", w.curr.At.Format(time.RFC3339), len(w.Paths), len(w.curr.Files))
+	if w.prev != nil {
+		fmt.Fprintf(&b, ", prevFiles=%d, deltaFiles=%+d", prevFiles, len(w.curr.Files)-prevFiles)
+	}
+	fmt.Fprintf(&b, ", events=%d", len(w.curr.Events))
+	if w.prev != nil {
+		fmt.Fprintf(&b, " (prev=%d, delta=%+d)", prevEvents, len(w.curr.Events)-prevEvents)
+	}
+	fmt.Fprintf(&b, ", maxFiles=%d)\n", w.MaxFiles)
 
 	if len(w.Paths) > 0 {
 		fmt.Fprintf(&b, "Roots: %s\n", strings.Join(w.Paths, ", "))
 	}
 	if len(w.Extensions) > 0 {
 		fmt.Fprintf(&b, "Extensions: %s\n", strings.Join(w.Extensions, ", "))
+	}
+
+	if len(w.curr.Events) > 0 {
+		typeCnt := map[FileEventType]int{}
+		for _, e := range w.curr.Events {
+			typeCnt[e.Type]++
+		}
+		fmt.Fprintf(&b, "EventTypes: created=%d modified=%d deleted=%d\n",
+			typeCnt[FileCreated], typeCnt[FileModified], typeCnt[FileDeleted])
 	}
 
 	if len(w.curr.Events) > 0 {

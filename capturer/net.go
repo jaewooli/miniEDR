@@ -107,11 +107,44 @@ func (n *NETCapturer) GetVerboseInfo() (string, error) {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "NETSnapshot(at=%s)\n", n.curr.At.Format(time.RFC3339))
-
 	sec := 0.0
 	if n.prev != nil {
 		sec = n.curr.At.Sub(n.prev.At).Seconds()
+	}
+	fmt.Fprintf(&b, "NETSnapshot(at=%s", n.curr.At.Format(time.RFC3339))
+	if n.prev != nil {
+		fmt.Fprintf(&b, ", interval=%s", n.curr.At.Sub(n.prev.At).Round(time.Millisecond))
+	}
+	fmt.Fprintf(&b, ")\n")
+
+	prevIfaces := 0
+	if n.prev != nil {
+		prevIfaces = len(n.prev.PerIF)
+	}
+	fmt.Fprintf(&b, "Interfaces: total=%d", len(n.curr.PerIF))
+	if n.prev != nil {
+		fmt.Fprintf(&b, " (prev=%d, delta=%+d)", prevIfaces, len(n.curr.PerIF)-prevIfaces)
+	}
+
+	var rxRate, txRate float64
+	if sec > 0 && n.prev != nil {
+		for ifname, cur := range n.curr.PerIF {
+			prev := n.prev.PerIF[ifname]
+			rxRate += float64(deltaUint64(prev.BytesRecv, cur.BytesRecv)) / sec
+			txRate += float64(deltaUint64(prev.BytesSent, cur.BytesSent)) / sec
+		}
+		fmt.Fprintf(&b, " rxRate=%.0fB/s txRate=%.0fB/s", rxRate, txRate)
+	}
+	fmt.Fprintf(&b, "\n")
+
+	if n.prev != nil {
+		newIf, goneIf := diffKeys(n.prev.PerIF, n.curr.PerIF)
+		if len(newIf) > 0 {
+			fmt.Fprintf(&b, "New ifaces: %s\n", strings.Join(newIf, ", "))
+		}
+		if len(goneIf) > 0 {
+			fmt.Fprintf(&b, "Removed ifaces: %s\n", strings.Join(goneIf, ", "))
+		}
 	}
 
 	names := make([]string, 0, len(n.curr.PerIF))
@@ -158,4 +191,26 @@ func (n *NETCapturer) GetVerboseInfo() (string, error) {
 // IsWarm reports whether a previous snapshot exists (needed for rate deltas).
 func (n *NETCapturer) IsWarm() bool {
 	return n.prev != nil
+}
+
+func diffKeys(prev, cur map[string]gnet.IOCountersStat) (added, removed []string) {
+	if prev == nil {
+		prev = map[string]gnet.IOCountersStat{}
+	}
+	if cur == nil {
+		cur = map[string]gnet.IOCountersStat{}
+	}
+	for k := range cur {
+		if _, ok := prev[k]; !ok {
+			added = append(added, k)
+		}
+	}
+	for k := range prev {
+		if _, ok := cur[k]; !ok {
+			removed = append(removed, k)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(removed)
+	return
 }

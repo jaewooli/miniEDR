@@ -120,7 +120,8 @@ func TestDISKCapturerVerbose(t *testing.T) {
 	got, err := d.GetVerboseInfo()
 	assertError(t, err, "")
 	want := "" +
-		"DISKSnapshot(at=1970-01-01T09:00:20+09:00)\n" +
+		"DISKSnapshot(at=1970-01-01T09:00:20+09:00, interval=10s)\n" +
+		"Summary: paths=1 (prev=1, delta=+0) devices=1 (prev=1, delta=+0)\n" +
 		"Usage:\n" +
 		"- /mnt fstype= used=50.00% (500/1000)\n" +
 		"IO:\n" +
