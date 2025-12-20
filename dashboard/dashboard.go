@@ -855,7 +855,7 @@ small {
               <div class="summary">{{.Display}}</div>
             </div>
             {{if .Verbose}}
-            <details class="detail-box">
+            <details class="detail-box" data-item="{{.Name}}-verbose">
               <summary>Verbose</summary>
               <pre>{{.Verbose}}</pre>
             </details>
