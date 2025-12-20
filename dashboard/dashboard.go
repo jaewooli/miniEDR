@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"math"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jaewooli/miniedr"
 	"github.com/jaewooli/miniedr/capturer"
 )
 
@@ -42,6 +44,8 @@ type DashboardServer struct {
 	itemIntervals map[string]time.Duration
 	netScales     map[string]float64
 	countScales   map[string]map[string]float64 // item -> label -> scale
+	ruleConfig    RuleConfig
+	detector      *miniedr.Detector
 }
 
 type dashboardItem struct {
@@ -55,6 +59,7 @@ type dashboardItem struct {
 	Graphs  []graphInfo
 	Display string
 	Meta    capturer.TelemetryMeta
+	Alerts  []miniedr.Alert
 }
 
 type dashboardLogEntry struct {
@@ -82,6 +87,18 @@ type dashboardData struct {
 	RefreshSecs       int
 	EventRefresh      bool
 	CaptureIntervalMS int64
+	RuleConfig        RuleConfig
+}
+
+// RuleConfig holds adjustable thresholds for built-in rules.
+type RuleConfig struct {
+	CPUHighPct       float64 `json:"cpu_high_pct"`
+	MemRamPct        float64 `json:"mem_ram_pct"`
+	MemSwapPct       float64 `json:"mem_swap_pct"`
+	ProcBurst        int     `json:"proc_burst"`
+	NetSpikeBytes    float64 `json:"net_spike_bps"`
+	FileEventsBurst  int     `json:"file_events"`
+	PersistMinChange int     `json:"persist_changes"`
 }
 
 func NewDashboardServer(capturers capturer.Capturers, title string, verbose bool) *DashboardServer {
@@ -89,12 +106,13 @@ func NewDashboardServer(capturers capturer.Capturers, title string, verbose bool
 		"divMS":  divMS,
 		"chartX": chartX,
 		"hasNL":  func(s string) bool { return strings.Contains(s, "\n") },
+		"mbps":   func(b float64) float64 { return b / (1024 * 1024) },
 	}).Parse(dashboardHTML))
 	if title == "" {
 		title = "miniEDR Dashboard"
 	}
 	displayInterval := minCapturerInterval(capturers)
-	return &DashboardServer{
+	d := &DashboardServer{
 		Capturers:       capturers,
 		tmpl:            t,
 		nowFn:           time.Now,
@@ -107,7 +125,10 @@ func NewDashboardServer(capturers capturer.Capturers, title string, verbose bool
 		clients:         make(map[chan string]struct{}),
 		lastPayload:     make(map[string]string),
 		logs:            make(map[string][]dashboardLogEntry),
+		ruleConfig:      defaultRuleConfig(),
 	}
+	d.rebuildDetector()
+	return d
 }
 
 // SetNowFunc overrides the clock for testing.
@@ -167,6 +188,7 @@ func (d *DashboardServer) Run(ctx context.Context, addr string) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", d)
 	mux.HandleFunc("/events", d.serveEvents)
+	mux.HandleFunc("/rules", d.handleRules)
 
 	srv := &http.Server{
 		Addr:    addr,
@@ -199,6 +221,35 @@ func (d *DashboardServer) handleDashboard(w http.ResponseWriter, r *http.Request
 // ServeHTTP implements http.Handler.
 func (d *DashboardServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d.handleDashboard(w, r)
+}
+
+// handleRules exposes GET/POST to view or update rule thresholds.
+func (d *DashboardServer) handleRules(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		d.mu.RLock()
+		cfg := d.ruleConfig
+		d.mu.RUnlock()
+		_ = json.NewEncoder(w).Encode(cfg)
+	case http.MethodPost:
+		var req RuleConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("invalid json: %v", err), http.StatusBadRequest)
+			return
+		}
+		cfg := normalizeRuleConfig(req)
+		d.mu.Lock()
+		d.ruleConfig = cfg
+		d.rebuildDetectorLocked()
+		if d.hasSnapshot {
+			d.snapshot.RuleConfig = d.ruleConfig
+		}
+		out := d.ruleConfig
+		d.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(out)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
 
 func (d *DashboardServer) captureAndStore() {
@@ -256,6 +307,12 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 				} else {
 					item.Verbose = verb
 				}
+			}
+			d.mu.RLock()
+			det := d.detector
+			d.mu.RUnlock()
+			if det != nil {
+				item.Alerts = det.Evaluate(info)
 			}
 			netScale := d.updateNetScale(name, item.Info)
 			countScale := func(label string, val float64) float64 { return d.updateCountScale(name, label, val) }
@@ -333,6 +390,7 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 		RefreshSecs:       refreshSecs,
 		EventRefresh:      eventRefresh,
 		CaptureIntervalMS: capInterval.Milliseconds(),
+		RuleConfig:        d.ruleConfig,
 	}
 	d.hasSnapshot = true
 	d.mu.Unlock()
@@ -769,6 +827,108 @@ small {
   overflow: auto;
   padding-right: 4px;
 }
+.rules-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.rule-tile {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.6);
+}
+.rule-tile h4 {
+  margin: 0;
+  font-size: 13px;
+  color: #e5e7eb;
+}
+.rule-tile small {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.rules-grid input {
+  width: 92%;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: #0b1220;
+  color: #e5e7eb;
+  font-weight: 600;
+}
+.rules-form button {
+  align-self: flex-start;
+  background: #22c55e;
+  color: #0b1220;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.rules-form button:hover {
+  background: #16a34a;
+}
+.ghost {
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  color: #e5e7eb;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ghost:hover {
+  border-color: #e5e7eb;
+}
+.alert-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.alert-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.severity-info { background: #38bdf8; color: #0b1220; }
+.severity-low { background: #a3e635; color: #0b1220; }
+.severity-medium { background: #fbbf24; color: #0b1220; }
+.severity-high { background: #f97316; color: #0b1220; }
+.severity-critical { background: #f43f5e; color: #0b1220; }
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 10;
+}
+.modal.show {
+  display: flex;
+}
+.modal-content {
+  background: #0b1220;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  padding: 20px 22px;
+  width: min(900px, 88vw);
+  max-height: 86vh;
+  overflow: auto;
+}
 </style>
 </head>
 <body>
@@ -779,6 +939,7 @@ small {
         <div class="meta">Refreshed at {{.RefreshedAt}} • Capture every {{printf "%.0f" (divMS .CaptureIntervalMS) }}s</div>
       </div>
       <div class="actions">
+        <button class="ghost" id="rulesBtn">Rules</button>
         <div class="control toggle">
           <input type="checkbox" id="eventRefresh" {{if .EventRefresh}}checked{{end}} />
           <label for="eventRefresh">Refresh on capture</label>
@@ -854,6 +1015,16 @@ small {
               <small>summary</small>
               <div class="summary">{{.Display}}</div>
             </div>
+            {{if .Alerts}}
+            <div>
+              <small>alerts ({{len .Alerts}})</small>
+              <ul class="alert-list">
+                {{range .Alerts}}
+                  <li><span class="pill severity-{{.Severity}}">{{.Severity}}</span> <strong>{{.Title}}</strong> — {{.Message}}</li>
+                {{end}}
+              </ul>
+            </div>
+            {{end}}
             {{if .Verbose}}
             <details class="detail-box" data-item="{{.Name}}-verbose">
               <summary>Verbose</summary>
@@ -897,6 +1068,64 @@ small {
       {{end}}
     </div>
   </div>
+
+  <div id="rulesModal" class="modal">
+    <div class="modal-content">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div class="title" style="font-size:20px;">Rule thresholds</div>
+          <div class="hint">Tune detections without restarting the agent</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="ghost" id="rulesClose">Close</button>
+        </div>
+      </div>
+      <form id="rulesForm" class="rules-form">
+        <div class="rules-grid">
+          <div class="rule-tile">
+            <h4>CPU high %</h4>
+            <small>Alert when total CPU crosses this percentage.</small>
+            <input name="cpu_high_pct" type="number" min="1" step="1" value="{{printf "%.0f" .RuleConfig.CPUHighPct}}" />
+          </div>
+          <div class="rule-tile">
+            <h4>RAM high %</h4>
+            <small>Trigger when RAM utilization exceeds this level.</small>
+            <input name="mem_ram_pct" type="number" min="1" step="1" value="{{printf "%.0f" .RuleConfig.MemRamPct}}" />
+          </div>
+          <div class="rule-tile">
+            <h4>Swap high %</h4>
+            <small>Swap pressure threshold for secondary alert.</small>
+            <input name="mem_swap_pct" type="number" min="1" step="1" value="{{printf "%.0f" .RuleConfig.MemSwapPct}}" />
+          </div>
+          <div class="rule-tile">
+            <h4>Process burst</h4>
+            <small>Number of new processes in a window before alerting.</small>
+            <input name="proc_burst" type="number" min="1" step="1" value="{{.RuleConfig.ProcBurst}}" />
+          </div>
+          <div class="rule-tile">
+            <h4>Net spike (MB/s)</h4>
+            <small>Combined RX+TX per second limit.</small>
+            <input name="net_spike_mb" type="number" min="0.01" step="0.01" value="{{printf "%.2f" (mbps .RuleConfig.NetSpikeBytes)}}" />
+          </div>
+          <div class="rule-tile">
+            <h4>File events burst</h4>
+            <small>File changes per window before firing.</small>
+            <input name="file_events" type="number" min="1" step="1" value="{{.RuleConfig.FileEventsBurst}}" />
+          </div>
+          <div class="rule-tile">
+            <h4>Persistence changes</h4>
+            <small>Count of autorun/service changes to trigger.</small>
+            <input name="persist_changes" type="number" min="1" step="1" value="{{.RuleConfig.PersistMinChange}}" />
+          </div>
+        </div>
+        <div class="hint" id="rulesStatus"></div>
+        <div style="display:flex;gap:8px;">
+          <button type="submit">Save</button>
+          <button type="button" class="ghost" id="rulesRefresh">Reset</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </body>
 <script>
   (function() {
@@ -905,6 +1134,12 @@ small {
     const input = document.getElementById('refreshInterval');
     const metaEl = document.querySelector('.meta');
     const gridEl = document.querySelector('.grid');
+    const rulesBtn = document.getElementById('rulesBtn');
+    const rulesModal = document.getElementById('rulesModal');
+    const rulesClose = document.getElementById('rulesClose');
+    const rulesRefresh = document.getElementById('rulesRefresh');
+    const rulesForm = document.getElementById('rulesForm');
+    const rulesStatus = document.getElementById('rulesStatus');
     const storageKeyAuto = 'miniedr:auto';
     const storageKeyAutoInterval = 'miniedr:autoInterval';
     const storageKeyEvent = 'miniedr:event';
@@ -938,6 +1173,75 @@ small {
         }
       } catch (e) {
         console.error('refresh failed', e);
+      }
+    }
+
+    async function loadRulesIntoForm() {
+      if (!rulesForm) return;
+      try {
+        const res = await fetch('/rules', {cache: 'no-store'});
+        if (!res.ok) throw new Error('load failed');
+        const data = await res.json();
+        const setVal = (name, val) => {
+          const inp = rulesForm.querySelector('[name="' + name + '"]');
+          if (inp) inp.value = val;
+        };
+        setVal('cpu_high_pct', data.cpu_high_pct);
+        setVal('mem_ram_pct', data.mem_ram_pct);
+        setVal('mem_swap_pct', data.mem_swap_pct);
+        setVal('proc_burst', data.proc_burst);
+        const netMb = (data.net_spike_bps || 0) / (1024 * 1024);
+        setVal('net_spike_mb', netMb.toFixed(2));
+        setVal('file_events', data.file_events);
+        setVal('persist_changes', data.persist_changes);
+        if (rulesStatus) rulesStatus.textContent = '';
+      } catch (err) {
+        if (rulesStatus) rulesStatus.textContent = 'Error loading rules';
+      }
+    }
+
+    function openRules() {
+      if (rulesModal) rulesModal.classList.add('show');
+      loadRulesIntoForm();
+    }
+    function closeRules() {
+      if (rulesModal) rulesModal.classList.remove('show');
+    }
+
+    async function submitRules(e) {
+      e.preventDefault();
+      if (!rulesForm) return;
+      const formData = new FormData(rulesForm);
+      const payload = {
+        cpu_high_pct: parseFloat(formData.get('cpu_high_pct')) || 0,
+        mem_ram_pct: parseFloat(formData.get('mem_ram_pct')) || 0,
+        mem_swap_pct: parseFloat(formData.get('mem_swap_pct')) || 0,
+        proc_burst: parseInt(formData.get('proc_burst'), 10) || 0,
+        net_spike_bps: Math.round((parseFloat(formData.get('net_spike_mb')) || 0) * 1024 * 1024),
+        file_events: parseInt(formData.get('file_events'), 10) || 0,
+        persist_changes: parseInt(formData.get('persist_changes'), 10) || 0,
+      };
+      try {
+        const res = await fetch('/rules', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+        const text = await res.text();
+        if (!res.ok) throw new Error(text || 'failed to save');
+        let data = {};
+        try { data = JSON.parse(text); } catch (_) {}
+        if (rulesStatus) {
+          const ts = new Date().toLocaleTimeString();
+          rulesStatus.textContent = "Saved at " + ts;
+        }
+        // refresh view to pick up new thresholds (and any alert changes)
+        refreshView();
+      } catch (err) {
+        if (rulesStatus) {
+          rulesStatus.textContent = "Error: " + err.message;
+        }
+        console.error(err);
       }
     }
 
@@ -999,10 +1303,21 @@ small {
       input.value = savedSec;
     }
 
+    if (rulesForm) {
+      rulesForm.addEventListener('submit', submitRules);
+    }
     autoBox.addEventListener('change', applyAuto);
     eventBox.addEventListener('change', () => applyEvent());
     input.addEventListener('change', applyAuto);
     document.getElementById('refreshBtn').onclick = refreshView;
+    if (rulesBtn) rulesBtn.onclick = openRules;
+    if (rulesClose) rulesClose.onclick = closeRules;
+    if (rulesRefresh) rulesRefresh.onclick = loadRulesIntoForm;
+    if (rulesModal) {
+      rulesModal.addEventListener('click', (e) => {
+        if (e.target === rulesModal) closeRules();
+      });
+    }
 
     applyAuto();
     applyEvent();
@@ -1033,6 +1348,68 @@ func minCapturerInterval(cs capturer.Capturers) time.Duration {
 		min = 5 * time.Second
 	}
 	return min
+}
+
+func defaultRuleConfig() RuleConfig {
+	return RuleConfig{
+		CPUHighPct:       90,
+		MemRamPct:        90,
+		MemSwapPct:       60,
+		ProcBurst:        10,
+		NetSpikeBytes:    1 * 1024 * 1024,
+		FileEventsBurst:  50,
+		PersistMinChange: 1,
+	}
+}
+
+func normalizeRuleConfig(cfg RuleConfig) RuleConfig {
+	def := defaultRuleConfig()
+	out := cfg
+	if out.CPUHighPct <= 0 {
+		out.CPUHighPct = def.CPUHighPct
+	}
+	if out.MemRamPct <= 0 {
+		out.MemRamPct = def.MemRamPct
+	}
+	if out.MemSwapPct <= 0 {
+		out.MemSwapPct = def.MemSwapPct
+	}
+	if out.ProcBurst <= 0 {
+		out.ProcBurst = def.ProcBurst
+	}
+	if out.NetSpikeBytes <= 0 {
+		out.NetSpikeBytes = def.NetSpikeBytes
+	}
+	if out.FileEventsBurst <= 0 {
+		out.FileEventsBurst = def.FileEventsBurst
+	}
+	if out.PersistMinChange <= 0 {
+		out.PersistMinChange = def.PersistMinChange
+	}
+	return out
+}
+
+func (d *DashboardServer) rebuildDetector() {
+	d.mu.Lock()
+	d.rebuildDetectorLocked()
+	d.mu.Unlock()
+}
+
+func (d *DashboardServer) rebuildDetectorLocked() {
+	cfg := normalizeRuleConfig(d.ruleConfig)
+	d.ruleConfig = cfg
+	d.detector = &miniedr.Detector{
+		Rules: []miniedr.RuleSpec{
+			miniedr.RuleCPUHigh(cfg.CPUHighPct),
+			miniedr.RuleMemPressure(cfg.MemRamPct, cfg.MemSwapPct),
+			miniedr.RuleProcBurst(cfg.ProcBurst),
+			miniedr.RuleNetSpike(cfg.NetSpikeBytes),
+			miniedr.RuleFileEventBurst(cfg.FileEventsBurst),
+			miniedr.RulePersistenceChange(cfg.PersistMinChange),
+		},
+		Deduper: &miniedr.AlertDeduper{Window: 30 * time.Second},
+		Limiter: &miniedr.RateLimiter{Window: 30 * time.Second, Burst: 20},
+	}
 }
 
 var tsRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:?\d{2})`)
