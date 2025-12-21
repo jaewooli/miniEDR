@@ -8,6 +8,7 @@
       "op": ">=",
       "value": 90,
       "message": "CPU usage {value}% exceeds threshold {threshold}%",
+      "source": "CPU",
       "enabled": true
     },
     {
@@ -18,6 +19,7 @@
       "op": ">=",
       "value": 90,
       "message": "RAM usage {value}% exceeds {threshold}%",
+      "source": "MEM",
       "enabled": true
     },
     {
@@ -28,6 +30,7 @@
       "op": ">=",
       "value": 60,
       "message": "Swap usage {value}% exceeds {threshold}%",
+      "source": "MEM",
       "enabled": true
     },
     {
@@ -38,6 +41,7 @@
       "op": ">=",
       "value": 10,
       "message": "{value} new processes detected (limit {threshold})",
+      "source": "PROC",
       "enabled": true
     },
     {
@@ -48,6 +52,7 @@
       "op": ">=",
       "value": 1048576,
       "message": "Network throughput {value}B/s exceeds {threshold}B/s",
+      "source": "NET",
       "enabled": true
     },
     {
@@ -58,6 +63,7 @@
       "op": ">=",
       "value": 50,
       "message": "{value} file events detected (limit {threshold})",
+      "source": "FILECHANGE",
       "enabled": true
     },
     {
@@ -68,6 +74,7 @@
       "op": ">=",
       "value": 1,
       "message": "Persistence entries changed (total {value})",
+      "source": "PERSIST",
       "enabled": true
     }
   ]

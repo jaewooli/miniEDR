@@ -355,7 +355,7 @@ small {
 }
 .rules-layout {
   display: grid;
-  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 .rules-layout .rules-table-wrap,
@@ -467,15 +467,43 @@ small {
 }
 .rules-table th:nth-child(8),
 .rules-table td:nth-child(8) {
-  width: 140px;
+  min-width: 110px;
+}
+.rules-table th:nth-child(2),
+.rules-table td:nth-child(2) {
+  min-width: 130px;
+}
+.rules-table th:nth-child(1),
+.rules-table td:nth-child(1) {
+  min-width: 50px;
+}
+.rules-table th:nth-child(3),
+.rules-table td:nth-child(3) {
+  min-width: 180px;
+}
+.rules-table th:nth-child(4),
+.rules-table td:nth-child(4) {
+  min-width: 110px;
+}
+.rules-table th:nth-child(5),
+.rules-table td:nth-child(5) {
+  min-width: 180px;
 }
 .rules-table th:nth-child(6),
 .rules-table td:nth-child(6) {
-  width: 80px;
+  min-width: 80px;
+}
+.rules-table th:nth-child(7),
+.rules-table td:nth-child(7) {
+  min-width: 110px;
 }
 .rules-table th:nth-child(9),
 .rules-table td:nth-child(9) {
   min-width: 260px;
+}
+.rules-table th:nth-child(10),
+.rules-table td:nth-child(10) {
+  min-width: 90px;
 }
 .rules-table input[type="checkbox"] {
   width: 16px;
@@ -756,23 +784,12 @@ small {
       </div>
       <form id="rulesForm" class="rules-form">
         <div class="rules-toolbar">
-          <div class="metrics-controls">
-            <input type="text" id="metricsInput" placeholder="custom.metric.name" />
-            <input type="text" id="metricsExprInput" placeholder="(cpu.total_pct + mem.ram.used_pct) / 2" />
-            <button type="button" class="ghost" id="metricsAdd">Add metric</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="ghost" id="metricsBtn">Metrics</button>
+            <button type="button" class="ghost" id="rulesAdd">Add rule</button>
           </div>
-          <button type="button" class="ghost" id="rulesAdd">Add rule</button>
         </div>
         <div class="rules-layout">
-          <div class="metrics-panel">
-            <div class="metrics-title">Default Metrics</div>
-            <div class="hint" id="metricsDefaultCount"></div>
-            <div id="metricsDefaultList" class="metrics-list"></div>
-            <div class="metrics-title" style="margin-top:12px;">Custom Metrics</div>
-            <div class="hint" id="metricsCustomCount"></div>
-            <div id="metricsList" class="metrics-list"></div>
-            <div class="hint" id="metricsStatus"></div>
-          </div>
           <div class="rules-table-wrap">
             <table class="rules-table">
               <thead>
@@ -794,13 +811,45 @@ small {
           </div>
         </div>
         <datalist id="rule-metrics"></datalist>
-        <div class="hint">Custom metrics support + - * / and parentheses. Message placeholders: {metric}, {value}, {threshold}</div>
+        <template id="ruleSourceOptions">
+          <option value="">Any capturer</option>
+          {{range .Items}}
+          <option value="{{.Name}}">{{.Name}}</option>
+          {{end}}
+        </template>
+        <div class="hint">Message placeholders: {metric}, {value}, {threshold}</div>
         <div class="hint" id="rulesStatus"></div>
         <div style="display:flex;gap:8px;">
           <button type="submit" class="primary-button">Save</button>
           <button type="button" class="ghost" id="rulesRefresh">Reset</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="metricsModal" class="modal">
+    <div class="modal-content">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div class="title" style="font-size:20px;">Metrics</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="ghost" id="metricsClose">Close</button>
+        </div>
+      </div>
+      <div class="metrics-controls" style="margin-top:12px;">
+        <input type="text" id="metricsInput" placeholder="custom.metric.name" />
+        <input type="text" id="metricsExprInput" placeholder="(cpu.total_pct + mem.ram.used_pct) / 2" />
+        <button type="button" class="ghost" id="metricsAdd">Add metric</button>
+      </div>
+      <div class="metrics-panel" style="margin-top:12px;">
+        <div class="metrics-title">Default Metrics</div>
+        <div class="hint" id="metricsDefaultCount"></div>
+        <div id="metricsDefaultList" class="metrics-list"></div>
+        <div class="metrics-title" style="margin-top:12px;">Custom Metrics</div>
+        <div class="hint" id="metricsCustomCount"></div>
+        <div id="metricsList" class="metrics-list"></div>
+        <div class="hint" id="metricsStatus"></div>
+      </div>
+      <div class="hint" style="margin-top:8px;">Custom metrics support + - * / and parentheses.</div>
     </div>
   </div>
 
@@ -872,6 +921,9 @@ small {
     const rulesTableBody = document.getElementById('rulesTableBody');
     const rulesAdd = document.getElementById('rulesAdd');
     const ruleMetrics = document.getElementById('rule-metrics');
+    const metricsBtn = document.getElementById('metricsBtn');
+    const metricsModal = document.getElementById('metricsModal');
+    const metricsClose = document.getElementById('metricsClose');
     const metricsInput = document.getElementById('metricsInput');
     const metricsExprInput = document.getElementById('metricsExprInput');
     const metricsAdd = document.getElementById('metricsAdd');
@@ -880,6 +932,15 @@ small {
     const metricsStatus = document.getElementById('metricsStatus');
     const metricsDefaultCount = document.getElementById('metricsDefaultCount');
     const metricsCustomCount = document.getElementById('metricsCustomCount');
+    const defaultRuleIds = new Set([
+      'cpu.high_usage',
+      'mem.high_usage',
+      'mem.swap_pressure',
+      'proc.burst',
+      'net.spike',
+      'file.events_burst',
+      'persist.change',
+    ]);
     const alertDetailModal = document.getElementById('alertDetailModal');
     const alertDetailClose = document.getElementById('alertDetailClose');
     const alertDetailAt = document.getElementById('alertDetailAt');
@@ -894,6 +955,7 @@ small {
     const alertDetailRelated = document.getElementById('alertDetailRelated');
     let alertFilterState = {severity: '', text: ''};
     let rulesBackdropPress = false;
+    let metricsBackdropPress = false;
     let alertBackdropPress = false;
     const storageKeyAuto = 'miniedr:auto';
     const storageKeyAutoInterval = 'miniedr:autoInterval';
@@ -1062,11 +1124,12 @@ small {
           </select>
         </td>
         <td><input type="number" class="rule-value" step="any" /></td>
-        <td><input type="text" class="rule-source" placeholder="CPU" /></td>
+        <td><select class="rule-source"></select></td>
         <td><input type="text" class="rule-message" placeholder="CPU {value}% exceeds {threshold}%" /></td>
         <td><button type="button" class="ghost rule-remove">Remove</button></td>
       `;
       const enabled = rule.enabled !== false;
+      const isDefault = defaultRuleIds.has((rule.id || '').trim());
       tr.querySelector('.rule-enabled').checked = enabled;
       tr.querySelector('.rule-id').value = rule.id || '';
       tr.querySelector('.rule-title').value = rule.title || '';
@@ -1074,7 +1137,15 @@ small {
       tr.querySelector('.rule-metric').value = rule.metric || '';
       tr.querySelector('.rule-op').value = rule.op || '>=';
       tr.querySelector('.rule-value').value = rule.value !== undefined ? rule.value : '';
-      tr.querySelector('.rule-source').value = rule.source || '';
+      const sourceSelect = tr.querySelector('.rule-source');
+      const sourceTemplate = document.getElementById('ruleSourceOptions');
+      if (sourceSelect && sourceTemplate) {
+        sourceSelect.innerHTML = sourceTemplate.innerHTML;
+      }
+      if (sourceSelect) {
+        sourceSelect.value = rule.source || '';
+        sourceSelect.disabled = isDefault;
+      }
       tr.querySelector('.rule-message').value = rule.message || '';
       tr.querySelector('.rule-remove').onclick = () => tr.remove();
       return tr;
@@ -1237,6 +1308,14 @@ small {
       if (rulesModal) rulesModal.classList.remove('show');
     }
 
+    function openMetrics() {
+      if (metricsModal) metricsModal.classList.add('show');
+      loadMetricsList();
+    }
+    function closeMetrics() {
+      if (metricsModal) metricsModal.classList.remove('show');
+    }
+
     async function submitRules(e) {
       e.preventDefault();
       if (!rulesForm) return;
@@ -1382,13 +1461,14 @@ small {
     if (rulesAdd) {
       rulesAdd.addEventListener('click', () => {
         if (!rulesTableBody) return;
-        rulesTableBody.appendChild(createRuleRow({
+        const row = createRuleRow({
           id: nextRuleId(),
           severity: 'info',
           op: '>=',
           value: 0,
           enabled: true,
-        }));
+        });
+        rulesTableBody.appendChild(row);
       });
     }
     autoBox.addEventListener('change', applyAuto);
@@ -1397,6 +1477,8 @@ small {
     document.getElementById('refreshBtn').onclick = refreshView;
     if (rulesBtn) rulesBtn.onclick = openRules;
     if (rulesClose) rulesClose.onclick = closeRules;
+    if (metricsBtn) metricsBtn.onclick = openMetrics;
+    if (metricsClose) metricsClose.onclick = closeMetrics;
     if (rulesRefresh) {
       rulesRefresh.addEventListener('click', (e) => {
         e.preventDefault();
@@ -1419,6 +1501,18 @@ small {
       });
       rulesModal.addEventListener('mouseleave', () => {
         rulesBackdropPress = false;
+      });
+    }
+    if (metricsModal) {
+      metricsModal.addEventListener('mousedown', (e) => {
+        metricsBackdropPress = e.target === metricsModal;
+      });
+      metricsModal.addEventListener('mouseup', (e) => {
+        if (metricsBackdropPress && e.target === metricsModal) closeMetrics();
+        metricsBackdropPress = false;
+      });
+      metricsModal.addEventListener('mouseleave', () => {
+        metricsBackdropPress = false;
       });
     }
     if (alertDetailModal) {

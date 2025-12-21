@@ -873,6 +873,7 @@ func defaultRulesConfig() RulesConfig {
 				Op:       ">=",
 				Value:    90,
 				Message:  "CPU usage {value}% exceeds threshold {threshold}%",
+				Source:   "CPU",
 				Enabled:  true,
 			},
 			{
@@ -883,6 +884,7 @@ func defaultRulesConfig() RulesConfig {
 				Op:       ">=",
 				Value:    90,
 				Message:  "RAM usage {value}% exceeds {threshold}%",
+				Source:   "MEM",
 				Enabled:  true,
 			},
 			{
@@ -893,6 +895,7 @@ func defaultRulesConfig() RulesConfig {
 				Op:       ">=",
 				Value:    60,
 				Message:  "Swap usage {value}% exceeds {threshold}%",
+				Source:   "MEM",
 				Enabled:  true,
 			},
 			{
@@ -903,6 +906,7 @@ func defaultRulesConfig() RulesConfig {
 				Op:       ">=",
 				Value:    10,
 				Message:  "{value} new processes detected (limit {threshold})",
+				Source:   "PROC",
 				Enabled:  true,
 			},
 			{
@@ -913,6 +917,7 @@ func defaultRulesConfig() RulesConfig {
 				Op:       ">=",
 				Value:    1 * 1024 * 1024,
 				Message:  "Network throughput {value}B/s exceeds {threshold}B/s",
+				Source:   "NET",
 				Enabled:  true,
 			},
 			{
@@ -923,6 +928,7 @@ func defaultRulesConfig() RulesConfig {
 				Op:       ">=",
 				Value:    50,
 				Message:  "{value} file events detected (limit {threshold})",
+				Source:   "FILECHANGE",
 				Enabled:  true,
 			},
 			{
@@ -933,6 +939,7 @@ func defaultRulesConfig() RulesConfig {
 				Op:       ">=",
 				Value:    1,
 				Message:  "Persistence entries changed (total {value})",
+				Source:   "PERSIST",
 				Enabled:  true,
 			},
 		},
