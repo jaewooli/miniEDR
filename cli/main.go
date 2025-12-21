@@ -51,9 +51,6 @@ func main() {
 		ds := dash.NewDashboardServer(capturers, *dashboardTitle, *verbose)
 		ds.SetAutoRefresh(*dashboardAuto, *dashboardAutoSec)
 		ds.SetEventRefresh(*dashboardEventRefresh)
-		if metricsPath := resolveMetricsPath(); metricsPath != "" {
-			ds.SetMetricsPath(metricsPath)
-		}
 		if *dashboardCaptureSec >= 0 {
 			ds.SetCaptureInterval(time.Duration(*dashboardCaptureSec) * time.Second)
 		}
@@ -117,37 +114,6 @@ func resolveConfigPath(userPath string) string {
 			return p
 		}
 		if p, ok := try(filepath.Join(exeDir, "..", "config.json")); ok {
-			return p
-		}
-	}
-	return ""
-}
-
-func resolveMetricsPath() string {
-	try := func(p string) (string, bool) {
-		if p == "" {
-			return "", false
-		}
-		info, err := os.Stat(p)
-		if err == nil && !info.IsDir() {
-			return p, true
-		}
-		return "", false
-	}
-
-	if p, ok := try("metrics.json"); ok {
-		return p
-	}
-	if p, ok := try(filepath.Join("cli", "metrics.json")); ok {
-		return p
-	}
-	exe, err := os.Executable()
-	if err == nil {
-		exeDir := filepath.Dir(exe)
-		if p, ok := try(filepath.Join(exeDir, "metrics.json")); ok {
-			return p
-		}
-		if p, ok := try(filepath.Join(exeDir, "cli", "metrics.json")); ok {
 			return p
 		}
 	}

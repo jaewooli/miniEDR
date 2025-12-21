@@ -180,16 +180,6 @@ func (d *DashboardServer) SetNowFunc(fn func() time.Time) {
 	d.nowFn = fn
 }
 
-// SetMetricsPath overrides the metrics.json location.
-func (d *DashboardServer) SetMetricsPath(path string) {
-	if path == "" {
-		return
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.metricsPath = path
-}
-
 // SetAutoRefresh configures default auto-refresh behavior and interval in seconds.
 func (d *DashboardServer) SetAutoRefresh(enabled bool, seconds int) {
 	if seconds <= 0 {
@@ -639,9 +629,31 @@ func correlateAlerts(entries []dashboardAlertEntry, intervals map[string]time.Du
 	if intervals == nil {
 		intervals = make(map[string]time.Duration)
 	}
+	maxInterval := defaultInterval
+	if maxInterval <= 0 {
+		maxInterval = time.Second
+	}
+	for _, v := range intervals {
+		if v > maxInterval {
+			maxInterval = v
+		}
+	}
+	idxs := make([]int, len(entries))
+	for i := range entries {
+		idxs[i] = i
+	}
+	sort.Slice(idxs, func(i, j int) bool {
+		return entries[idxs[i]].AtTime.Before(entries[idxs[j]].AtTime)
+	})
 	related := make([][]string, len(entries))
-	for i := 0; i < len(entries); i++ {
-		for j := i + 1; j < len(entries); j++ {
+	for a := 0; a < len(idxs); a++ {
+		i := idxs[a]
+		atI := entries[i].AtTime
+		for b := a + 1; b < len(idxs); b++ {
+			j := idxs[b]
+			if entries[j].AtTime.After(atI.Add(maxInterval)) {
+				break
+			}
 			if !alertsOverlap(entries[i], entries[j], intervals, defaultInterval) {
 				continue
 			}
