@@ -1,0 +1,74 @@
+{
+  "rules": [
+    {
+      "id": "cpu.high_usage",
+      "title": "High CPU usage",
+      "severity": "medium",
+      "metric": "cpu.total_pct",
+      "op": ">=",
+      "value": 90,
+      "message": "CPU usage {value}% exceeds threshold {threshold}%",
+      "enabled": true
+    },
+    {
+      "id": "mem.high_usage",
+      "title": "High RAM usage",
+      "severity": "medium",
+      "metric": "mem.ram.used_pct",
+      "op": ">=",
+      "value": 90,
+      "message": "RAM usage {value}% exceeds {threshold}%",
+      "enabled": true
+    },
+    {
+      "id": "mem.swap_pressure",
+      "title": "Swap pressure",
+      "severity": "low",
+      "metric": "mem.swap.used_pct",
+      "op": ">=",
+      "value": 60,
+      "message": "Swap usage {value}% exceeds {threshold}%",
+      "enabled": true
+    },
+    {
+      "id": "proc.burst",
+      "title": "Process burst",
+      "severity": "medium",
+      "metric": "proc.new",
+      "op": ">=",
+      "value": 10,
+      "message": "{value} new processes detected (limit {threshold})",
+      "enabled": true
+    },
+    {
+      "id": "net.spike",
+      "title": "Network spike",
+      "severity": "low",
+      "metric": "net.total_bytes_per_sec",
+      "op": ">=",
+      "value": 1048576,
+      "message": "Network throughput {value}B/s exceeds {threshold}B/s",
+      "enabled": true
+    },
+    {
+      "id": "file.events_burst",
+      "title": "File change burst",
+      "severity": "low",
+      "metric": "file.events",
+      "op": ">=",
+      "value": 50,
+      "message": "{value} file events detected (limit {threshold})",
+      "enabled": true
+    },
+    {
+      "id": "persist.change",
+      "title": "Persistence changes",
+      "severity": "low",
+      "metric": "persist.total_changes",
+      "op": ">=",
+      "value": 1,
+      "message": "Persistence entries changed (total {value})",
+      "enabled": true
+    }
+  ]
+}

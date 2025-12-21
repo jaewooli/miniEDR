@@ -6,35 +6,38 @@ import (
 	"github.com/jaewooli/miniedr/capturer"
 )
 
-const exampleconfig = `capturers:
-  cpu:
-    enabled: true
-
-  conn:
-    enabled: true
-    kind: all
-
-  disk:
-    enabled: true
-    paths: ["/"]       
-
-  filewatch:
-    enabled: true
-    paths: ["/tmp", "/var/tmp"]
-    max_files: 50000
-
-  mem:
-    enabled: true
-
-  net:
-    enabled: true
-
-  persist:
-    enabled: true 
-
-  proc:
-    enabled: true
-`
+const exampleconfig = `{
+  "capturers": {
+    "cpu": {
+      "enabled": true
+    },
+    "conn": {
+      "enabled": true,
+      "kind": "all"
+    },
+    "disk": {
+      "enabled": true,
+      "paths": ["/"]
+    },
+    "filewatch": {
+      "enabled": true,
+      "paths": ["/tmp", "/var/tmp"],
+      "max_files": 50000
+    },
+    "mem": {
+      "enabled": true
+    },
+    "net": {
+      "enabled": true
+    },
+    "persist": {
+      "enabled": true
+    },
+    "proc": {
+      "enabled": true
+    }
+  }
+}`
 
 func TestCapturersBuilder(t *testing.T) {
 	gotBuilder := capturer.NewCapturersBuilder()

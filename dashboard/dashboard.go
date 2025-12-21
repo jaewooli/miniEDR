@@ -47,7 +47,8 @@ type DashboardServer struct {
 	countScales   map[string]map[string]float64 // item -> label -> scale
 	alertHistory  map[string][]dashboardAlertEntry
 	globalAlerts  []dashboardAlertEntry
-	ruleConfig    RuleConfig
+	rulesConfig   RulesConfig
+	rulesPath     string
 	detector      *miniedr.Detector
 }
 
@@ -108,18 +109,25 @@ type dashboardData struct {
 	RefreshSecs       int
 	EventRefresh      bool
 	CaptureIntervalMS int64
-	RuleConfig        RuleConfig
+	RulesConfig       RulesConfig
 }
 
-// RuleConfig holds adjustable thresholds for built-in rules.
-type RuleConfig struct {
-	CPUHighPct       float64 `json:"cpu_high_pct"`
-	MemRamPct        float64 `json:"mem_ram_pct"`
-	MemSwapPct       float64 `json:"mem_swap_pct"`
-	ProcBurst        int     `json:"proc_burst"`
-	NetSpikeBytes    float64 `json:"net_spike_bps"`
-	FileEventsBurst  int     `json:"file_events"`
-	PersistMinChange int     `json:"persist_changes"`
+// RuleDefinition defines a single metric threshold rule.
+type RuleDefinition struct {
+	ID       string                 `json:"id"`
+	Title    string                 `json:"title"`
+	Severity miniedr.AlertSeverity  `json:"severity"`
+	Metric   string                 `json:"metric"`
+	Op       string                 `json:"op"`
+	Value    float64                `json:"value"`
+	Message  string                 `json:"message"`
+	Source   string                 `json:"source,omitempty"`
+	Enabled  bool                   `json:"enabled"`
+}
+
+// RulesConfig holds editable rules persisted to disk.
+type RulesConfig struct {
+	Rules []RuleDefinition `json:"rules"`
 }
 
 func NewDashboardServer(capturers capturer.Capturers, title string, verbose bool) *DashboardServer {
@@ -148,8 +156,9 @@ func NewDashboardServer(capturers capturer.Capturers, title string, verbose bool
 		logs:            make(map[string][]dashboardLogEntry),
 		alertHistory:    make(map[string][]dashboardAlertEntry),
 		globalAlerts:    []dashboardAlertEntry{},
-		ruleConfig:      defaultRuleConfig(),
+		rulesPath:       "rules.json",
 	}
+	d.rulesConfig = d.loadRulesConfig()
 	d.rebuildDetector()
 	return d
 }
@@ -246,29 +255,33 @@ func (d *DashboardServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d.handleDashboard(w, r)
 }
 
-// handleRules exposes GET/POST to view or update rule thresholds.
+// handleRules exposes GET/POST to view or update rule configuration.
 func (d *DashboardServer) handleRules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		d.mu.RLock()
-		cfg := d.ruleConfig
+		cfg := d.rulesConfig
 		d.mu.RUnlock()
 		_ = json.NewEncoder(w).Encode(cfg)
 	case http.MethodPost:
-		var req RuleConfig
+		var req RulesConfig
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, fmt.Sprintf("invalid json: %v", err), http.StatusBadRequest)
 			return
 		}
-		cfg := normalizeRuleConfig(req)
+		cfg := normalizeRulesConfig(req)
 		d.mu.Lock()
-		d.ruleConfig = cfg
+		d.rulesConfig = cfg
 		d.rebuildDetectorLocked()
 		if d.hasSnapshot {
-			d.snapshot.RuleConfig = d.ruleConfig
+			d.snapshot.RulesConfig = d.rulesConfig
 		}
-		out := d.ruleConfig
+		out := d.rulesConfig
 		d.mu.Unlock()
+		if err := d.saveRulesConfig(cfg); err != nil {
+			http.Error(w, fmt.Sprintf("save rules: %v", err), http.StatusInternalServerError)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(out)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -481,7 +494,7 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 		RefreshSecs:       refreshSecs,
 		EventRefresh:      eventRefresh,
 		CaptureIntervalMS: capInterval.Milliseconds(),
-		RuleConfig:        d.ruleConfig,
+		RulesConfig:       d.rulesConfig,
 	}
 	d.hasSnapshot = true
 	d.mu.Unlock()
@@ -753,41 +766,107 @@ func minCapturerInterval(cs capturer.Capturers) time.Duration {
 	return min
 }
 
-func defaultRuleConfig() RuleConfig {
-	return RuleConfig{
-		CPUHighPct:       90,
-		MemRamPct:        90,
-		MemSwapPct:       60,
-		ProcBurst:        10,
-		NetSpikeBytes:    1 * 1024 * 1024,
-		FileEventsBurst:  50,
-		PersistMinChange: 1,
+func defaultRulesConfig() RulesConfig {
+	return RulesConfig{
+		Rules: []RuleDefinition{
+			{
+				ID:       "cpu.high_usage",
+				Title:    "High CPU usage",
+				Severity: miniedr.SeverityMedium,
+				Metric:   "cpu.total_pct",
+				Op:       ">=",
+				Value:    90,
+				Message:  "CPU usage {value}% exceeds threshold {threshold}%",
+				Enabled:  true,
+			},
+			{
+				ID:       "mem.high_usage",
+				Title:    "High RAM usage",
+				Severity: miniedr.SeverityMedium,
+				Metric:   "mem.ram.used_pct",
+				Op:       ">=",
+				Value:    90,
+				Message:  "RAM usage {value}% exceeds {threshold}%",
+				Enabled:  true,
+			},
+			{
+				ID:       "mem.swap_pressure",
+				Title:    "Swap pressure",
+				Severity: miniedr.SeverityLow,
+				Metric:   "mem.swap.used_pct",
+				Op:       ">=",
+				Value:    60,
+				Message:  "Swap usage {value}% exceeds {threshold}%",
+				Enabled:  true,
+			},
+			{
+				ID:       "proc.burst",
+				Title:    "Process burst",
+				Severity: miniedr.SeverityMedium,
+				Metric:   "proc.new",
+				Op:       ">=",
+				Value:    10,
+				Message:  "{value} new processes detected (limit {threshold})",
+				Enabled:  true,
+			},
+			{
+				ID:       "net.spike",
+				Title:    "Network spike",
+				Severity: miniedr.SeverityLow,
+				Metric:   "net.total_bytes_per_sec",
+				Op:       ">=",
+				Value:    1 * 1024 * 1024,
+				Message:  "Network throughput {value}B/s exceeds {threshold}B/s",
+				Enabled:  true,
+			},
+			{
+				ID:       "file.events_burst",
+				Title:    "File change burst",
+				Severity: miniedr.SeverityLow,
+				Metric:   "file.events",
+				Op:       ">=",
+				Value:    50,
+				Message:  "{value} file events detected (limit {threshold})",
+				Enabled:  true,
+			},
+			{
+				ID:       "persist.change",
+				Title:    "Persistence changes",
+				Severity: miniedr.SeverityLow,
+				Metric:   "persist.total_changes",
+				Op:       ">=",
+				Value:    1,
+				Message:  "Persistence entries changed (total {value})",
+				Enabled:  true,
+			},
+		},
 	}
 }
 
-func normalizeRuleConfig(cfg RuleConfig) RuleConfig {
-	def := defaultRuleConfig()
-	out := cfg
-	if out.CPUHighPct <= 0 {
-		out.CPUHighPct = def.CPUHighPct
-	}
-	if out.MemRamPct <= 0 {
-		out.MemRamPct = def.MemRamPct
-	}
-	if out.MemSwapPct <= 0 {
-		out.MemSwapPct = def.MemSwapPct
-	}
-	if out.ProcBurst <= 0 {
-		out.ProcBurst = def.ProcBurst
-	}
-	if out.NetSpikeBytes <= 0 {
-		out.NetSpikeBytes = def.NetSpikeBytes
-	}
-	if out.FileEventsBurst <= 0 {
-		out.FileEventsBurst = def.FileEventsBurst
-	}
-	if out.PersistMinChange <= 0 {
-		out.PersistMinChange = def.PersistMinChange
+func normalizeRulesConfig(cfg RulesConfig) RulesConfig {
+	out := RulesConfig{Rules: make([]RuleDefinition, 0, len(cfg.Rules))}
+	for i, rule := range cfg.Rules {
+		rule.ID = strings.TrimSpace(rule.ID)
+		rule.Title = strings.TrimSpace(rule.Title)
+		rule.Metric = strings.TrimSpace(rule.Metric)
+		rule.Op = normalizeOp(rule.Op)
+		rule.Message = strings.TrimSpace(rule.Message)
+		rule.Source = strings.TrimSpace(rule.Source)
+		rule.Severity = normalizeSeverity(rule.Severity)
+		if rule.ID == "" {
+			rule.ID = fmt.Sprintf("custom.rule.%d", i+1)
+		}
+		if rule.Title == "" {
+			if rule.ID != "" {
+				rule.Title = rule.ID
+			} else if rule.Metric != "" {
+				rule.Title = rule.Metric
+			}
+		}
+		if rule.Metric == "" {
+			continue
+		}
+		out.Rules = append(out.Rules, rule)
 	}
 	return out
 }
@@ -799,18 +878,157 @@ func (d *DashboardServer) rebuildDetector() {
 }
 
 func (d *DashboardServer) rebuildDetectorLocked() {
-	cfg := normalizeRuleConfig(d.ruleConfig)
-	d.ruleConfig = cfg
+	cfg := normalizeRulesConfig(d.rulesConfig)
+	d.rulesConfig = cfg
+	specs := make([]miniedr.RuleSpec, 0, len(cfg.Rules))
+	for _, rule := range cfg.Rules {
+		if !rule.Enabled {
+			continue
+		}
+		specs = append(specs, buildMetricRule(rule))
+	}
 	d.detector = &miniedr.Detector{
-		Rules: []miniedr.RuleSpec{
-			miniedr.RuleCPUHigh(cfg.CPUHighPct),
-			miniedr.RuleMemPressure(cfg.MemRamPct, cfg.MemSwapPct),
-			miniedr.RuleProcBurst(cfg.ProcBurst),
-			miniedr.RuleNetSpike(cfg.NetSpikeBytes),
-			miniedr.RuleFileEventBurst(cfg.FileEventsBurst),
-			miniedr.RulePersistenceChange(cfg.PersistMinChange),
-		},
+		Rules: specs,
 		// Keep alert history per snapshot without dedup/rate-limit for the dashboard.
+	}
+}
+
+func (d *DashboardServer) loadRulesConfig() RulesConfig {
+	cfg := defaultRulesConfig()
+	if d.rulesPath == "" {
+		return cfg
+	}
+	data, err := os.ReadFile(d.rulesPath)
+	if err != nil {
+		return cfg
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return defaultRulesConfig()
+	}
+	return normalizeRulesConfig(cfg)
+}
+
+func (d *DashboardServer) saveRulesConfig(cfg RulesConfig) error {
+	if d.rulesPath == "" {
+		return nil
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(d.rulesPath, append(data, '\n'), 0o644)
+}
+
+func buildMetricRule(def RuleDefinition) miniedr.RuleSpec {
+	return miniedr.RuleSpec{
+		ID:       def.ID,
+		Title:    def.Title,
+		Severity: def.Severity,
+		Source:   def.Source,
+		Eval: func(info capturer.InfoData) []miniedr.Alert {
+			if def.Source != "" && !strings.EqualFold(def.Source, info.Meta.Capturer) {
+				return nil
+			}
+			val, ok := metricValue(info, def.Metric)
+			if !ok {
+				return nil
+			}
+			if !compareMetric(val, def.Op, def.Value) {
+				return nil
+			}
+			title := renderTemplate(def.Title, def.Metric, val, def.Value)
+			message := renderTemplate(def.Message, def.Metric, val, def.Value)
+			if message == "" {
+				message = fmt.Sprintf("%s=%s %s %s", def.Metric, formatFloat(val), def.Op, formatFloat(def.Value))
+			}
+			return []miniedr.Alert{{
+				RuleID:   def.ID,
+				Title:    title,
+				Severity: def.Severity,
+				Message:  message,
+				Evidence: map[string]any{def.Metric: val},
+			}}
+		},
+	}
+}
+
+func metricValue(info capturer.InfoData, key string) (float64, bool) {
+	if info.Metrics != nil {
+		if v, ok := info.Metrics[key]; ok {
+			return v, true
+		}
+	}
+	switch key {
+	case "net.total_bytes_per_sec":
+		var total float64
+		rx, okRx := metricValue(info, "net.rx_bytes_per_sec")
+		tx, okTx := metricValue(info, "net.tx_bytes_per_sec")
+		if !okRx && !okTx {
+			return 0, false
+		}
+		total = rx + tx
+		return total, true
+	case "persist.total_changes":
+		added, okAdded := metricValue(info, "persist.added")
+		changed, okChanged := metricValue(info, "persist.changed")
+		removed, okRemoved := metricValue(info, "persist.removed")
+		if !okAdded && !okChanged && !okRemoved {
+			return 0, false
+		}
+		return added + changed + removed, true
+	}
+	return 0, false
+}
+
+func compareMetric(value float64, op string, threshold float64) bool {
+	switch op {
+	case ">":
+		return value > threshold
+	case ">=":
+		return value >= threshold
+	case "<":
+		return value < threshold
+	case "<=":
+		return value <= threshold
+	case "==":
+		return value == threshold
+	case "!=":
+		return value != threshold
+	default:
+		return value >= threshold
+	}
+}
+
+func renderTemplate(text, metric string, value, threshold float64) string {
+	if text == "" {
+		return ""
+	}
+	out := strings.ReplaceAll(text, "{metric}", metric)
+	out = strings.ReplaceAll(out, "{value}", formatFloat(value))
+	out = strings.ReplaceAll(out, "{threshold}", formatFloat(threshold))
+	return out
+}
+
+func formatFloat(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+func normalizeOp(op string) string {
+	op = strings.TrimSpace(op)
+	switch op {
+	case ">", ">=", "<", "<=", "==", "!=":
+		return op
+	default:
+		return ">="
+	}
+}
+
+func normalizeSeverity(s miniedr.AlertSeverity) miniedr.AlertSeverity {
+	switch miniedr.AlertSeverity(strings.ToLower(string(s))) {
+	case miniedr.SeverityInfo, miniedr.SeverityLow, miniedr.SeverityMedium, miniedr.SeverityHigh, miniedr.SeverityCritical:
+		return miniedr.AlertSeverity(strings.ToLower(string(s)))
+	default:
+		return miniedr.SeverityInfo
 	}
 }
 

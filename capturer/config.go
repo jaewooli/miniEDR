@@ -3,36 +3,36 @@ package capturer
 // Config structures for enabling/disabling capturers and their options.
 
 type CapturerToggle struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `json:"enabled"`
 }
 
 type ConnCfg struct {
-	Enabled bool   `yaml:"enabled"`
-	Kind    string `yaml:"kind"` // tcp/udp/all
+	Enabled bool   `json:"enabled"`
+	Kind    string `json:"kind"` // tcp/udp/all
 }
 
 type DiskCfg struct {
-	Enabled bool     `yaml:"enabled"`
-	Paths   []string `yaml:"paths"`
+	Enabled bool     `json:"enabled"`
+	Paths   []string `json:"paths"`
 }
 
 type FileChangeCfg struct {
-	Enabled  bool     `yaml:"enabled"`
-	Paths    []string `yaml:"paths"`
-	MaxFiles int      `yaml:"max_files"`
+	Enabled  bool     `json:"enabled"`
+	Paths    []string `json:"paths"`
+	MaxFiles int      `json:"max_files"`
 }
 
 type CapturersConfig struct {
 	Capturers struct {
-		CPU        CapturerToggle `yaml:"cpu"`
-		Conn       ConnCfg        `yaml:"conn"`
-		Disk       DiskCfg        `yaml:"disk"`
-		FileChange FileChangeCfg  `yaml:"filewatch"`
-		MEM        CapturerToggle `yaml:"mem"`
-		NET        CapturerToggle `yaml:"net"`
-		Persist    CapturerToggle `yaml:"persist"`
-		Proc       CapturerToggle `yaml:"proc"`
-	} `yaml:"capturers"`
+		CPU        CapturerToggle `json:"cpu"`
+		Conn       ConnCfg        `json:"conn"`
+		Disk       DiskCfg        `json:"disk"`
+		FileChange FileChangeCfg  `json:"filewatch"`
+		MEM        CapturerToggle `json:"mem"`
+		NET        CapturerToggle `json:"net"`
+		Persist    CapturerToggle `json:"persist"`
+		Proc       CapturerToggle `json:"proc"`
+	} `json:"capturers"`
 }
 
 func defaultCapturersConfig() CapturersConfig {

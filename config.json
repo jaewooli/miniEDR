@@ -1,0 +1,32 @@
+{
+  "capturers": {
+    "cpu": {
+      "enabled": true
+    },
+    "conn": {
+      "enabled": true,
+      "kind": "all"
+    },
+    "disk": {
+      "enabled": true,
+      "paths": ["/home/jaeu1341/06_GO_PROJECT/"]
+    },
+    "filewatch": {
+      "enabled": true,
+      "paths": ["/home/jaeu1341/06_GO_PROJECT/"],
+      "max_files": 100000
+    },
+    "mem": {
+      "enabled": true
+    },
+    "net": {
+      "enabled": true
+    },
+    "persist": {
+      "enabled": true
+    },
+    "proc": {
+      "enabled": true
+    }
+  }
+}

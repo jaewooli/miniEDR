@@ -28,7 +28,7 @@ func main() {
 	dashboardEventRefresh := flag.Bool("dashboard-event-refresh", true, "refresh dashboard when captures complete (enables per-capturer intervals)")
 	dashboardCaptureSec := flag.Int("dashboard-capture-sec", 0, "dashboard capture interval seconds (0 uses per-capturer defaults)")
 	telemetryPath := flag.String("telemetry-file", "", "path to write telemetry JSON lines (rotates at ~5MB)")
-	configPath := flag.String("config", "", "path to config file (default: auto-detect config.yaml)")
+	configPath := flag.String("config", "", "path to config file (default: auto-detect config.json)")
 	flag.Parse()
 
 	printStartupHelp(*dashboardEnabled, *dashboardAddr)
@@ -104,16 +104,16 @@ func resolveConfigPath(userPath string) string {
 	if p, ok := try(userPath); ok {
 		return p
 	}
-	if p, ok := try("config.yaml"); ok {
+	if p, ok := try("config.json"); ok {
 		return p
 	}
 	exe, err := os.Executable()
 	if err == nil {
 		exeDir := filepath.Dir(exe)
-		if p, ok := try(filepath.Join(exeDir, "config.yaml")); ok {
+		if p, ok := try(filepath.Join(exeDir, "config.json")); ok {
 			return p
 		}
-		if p, ok := try(filepath.Join(exeDir, "..", "config.yaml")); ok {
+		if p, ok := try(filepath.Join(exeDir, "..", "config.json")); ok {
 			return p
 		}
 	}

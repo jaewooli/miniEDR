@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jaewooli/miniedr"
 	"github.com/jaewooli/miniedr/capturer"
 )
 
@@ -129,6 +131,8 @@ func (a *alertStub) GetInfo() (capturer.InfoData, error) {
 
 func TestRulesHandlerRoundTrip(t *testing.T) {
 	ds := NewDashboardServer(capturer.Capturers{}, "TestDash", false)
+	ds.rulesPath = ""
+	ds.rulesConfig = defaultRulesConfig()
 
 	req := httptest.NewRequest(http.MethodGet, "/rules", nil)
 	w := httptest.NewRecorder()
@@ -136,23 +140,26 @@ func TestRulesHandlerRoundTrip(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET /rules status = %d", w.Code)
 	}
-	var got RuleConfig
+	var got RulesConfig
 	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 		t.Fatalf("decode GET /rules: %v", err)
 	}
-	want := defaultRuleConfig()
-	if got != want {
+	want := defaultRulesConfig()
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("GET /rules = %+v, want %+v", got, want)
 	}
 
-	update := RuleConfig{
-		CPUHighPct:       12,
-		MemRamPct:        34,
-		MemSwapPct:       56,
-		ProcBurst:        3,
-		NetSpikeBytes:    2048,
-		FileEventsBurst:  7,
-		PersistMinChange: 2,
+	update := RulesConfig{
+		Rules: []RuleDefinition{{
+			ID:       "custom.test",
+			Title:    "Custom Test",
+			Severity: miniedr.SeverityHigh,
+			Metric:   "cpu.total_pct",
+			Op:       ">=",
+			Value:    42,
+			Message:  "CPU {value}% >= {threshold}%",
+			Enabled:  true,
+		}},
 	}
 	body, _ := json.Marshal(update)
 	req = httptest.NewRequest(http.MethodPost, "/rules", bytes.NewReader(body))
@@ -168,11 +175,11 @@ func TestRulesHandlerRoundTrip(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET /rules after update status = %d", w.Code)
 	}
-	var gotAfter RuleConfig
+	var gotAfter RulesConfig
 	if err := json.NewDecoder(w.Body).Decode(&gotAfter); err != nil {
 		t.Fatalf("decode GET /rules after update: %v", err)
 	}
-	if gotAfter != update {
+	if !reflect.DeepEqual(gotAfter, update) {
 		t.Fatalf("GET /rules after update = %+v, want %+v", gotAfter, update)
 	}
 }

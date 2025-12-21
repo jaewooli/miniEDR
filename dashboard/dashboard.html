@@ -347,40 +347,63 @@ small {
   flex-direction: column;
   gap: 10px;
 }
-.rules-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  margin-top: 5px;
-  gap: 10px;
-}
-.rule-tile {
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 10px;
-  padding: 10px;
+.rules-toolbar {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.rules-table-wrap {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  overflow: auto;
   background: rgba(15, 23, 42, 0.6);
 }
-.rule-tile h4 {
-  margin: 0;
-  font-size: 13px;
-  color: #e5e7eb;
+.rules-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
 }
-.rule-tile small {
+.rules-table th,
+.rules-table td {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.rules-table th {
   font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
   color: #94a3b8;
 }
-.rules-grid input {
-  width: 92%;
-  padding: 8px;
+.rules-table input,
+.rules-table select {
+  width: 100%;
+  padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.3);
   background: #0b1220;
   color: #e5e7eb;
   font-weight: 600;
+  box-sizing: border-box;
 }
-.rules-form button {
+.rules-table th:nth-child(8),
+.rules-table td:nth-child(8) {
+  width: 140px;
+}
+.rules-table th:nth-child(6),
+.rules-table td:nth-child(6) {
+  width: 80px;
+}
+.rules-table th:nth-child(9),
+.rules-table td:nth-child(9) {
+  min-width: 260px;
+}
+.rules-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+.rules-form .primary-button {
   align-self: flex-start;
   background: #22c55e;
   color: #0b1220;
@@ -390,7 +413,7 @@ small {
   cursor: pointer;
   font-weight: 700;
 }
-.rules-form button:hover {
+.rules-form .primary-button:hover {
   background: #16a34a;
 }
 .ghost {
@@ -467,6 +490,9 @@ small {
   width: min(900px, 88vw);
   max-height: 86vh;
   overflow: auto;
+}
+#rulesModal .modal-content {
+  width: min(1200px, 94vw);
 }
 </style>
 </head>
@@ -643,54 +669,67 @@ small {
     <div class="modal-content">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
         <div>
-          <div class="title" style="font-size:20px;">Rule thresholds</div>
-          <div class="hint">Tune detections without restarting the agent</div>
+          <div class="title" style="font-size:20px;">Rules</div>
+          <div class="hint">Create and tune detections without restarting the agent</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="ghost" id="rulesClose">Close</button>
         </div>
       </div>
       <form id="rulesForm" class="rules-form">
-        <div class="rules-grid">
-          <div class="rule-tile">
-            <h4>CPU high %</h4>
-            <small>Alert when total CPU crosses this percentage.</small>
-            <input name="cpu_high_pct" type="number" min="1" step="1" value="{{printf "%.0f" .RuleConfig.CPUHighPct}}" />
-          </div>
-          <div class="rule-tile">
-            <h4>RAM high %</h4>
-            <small>Trigger when RAM utilization exceeds this level.</small>
-            <input name="mem_ram_pct" type="number" min="1" step="1" value="{{printf "%.0f" .RuleConfig.MemRamPct}}" />
-          </div>
-          <div class="rule-tile">
-            <h4>Swap high %</h4>
-            <small>Swap pressure threshold for secondary alert.</small>
-            <input name="mem_swap_pct" type="number" min="1" step="1" value="{{printf "%.0f" .RuleConfig.MemSwapPct}}" />
-          </div>
-          <div class="rule-tile">
-            <h4>Process burst</h4>
-            <small>Number of new processes in a window before alerting.</small>
-            <input name="proc_burst" type="number" min="1" step="1" value="{{.RuleConfig.ProcBurst}}" />
-          </div>
-          <div class="rule-tile">
-            <h4>Net spike (MB/s)</h4>
-            <small>Combined RX+TX per second limit.</small>
-            <input name="net_spike_mb" type="number" min="0.01" step="0.01" value="{{printf "%.2f" (mbps .RuleConfig.NetSpikeBytes)}}" />
-          </div>
-          <div class="rule-tile">
-            <h4>File events burst</h4>
-            <small>File changes per window before firing.</small>
-            <input name="file_events" type="number" min="1" step="1" value="{{.RuleConfig.FileEventsBurst}}" />
-          </div>
-          <div class="rule-tile">
-            <h4>Persistence changes</h4>
-            <small>Count of autorun/service changes to trigger.</small>
-            <input name="persist_changes" type="number" min="1" step="1" value="{{.RuleConfig.PersistMinChange}}" />
-          </div>
+        <div class="rules-toolbar">
+          <button type="button" class="ghost" id="rulesAdd">Add rule</button>
         </div>
+        <div class="rules-table-wrap">
+          <table class="rules-table">
+            <thead>
+              <tr>
+                <th>On</th>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Severity</th>
+                <th>Metric</th>
+                <th>Op</th>
+                <th>Value</th>
+                <th>Source</th>
+                <th>Message</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="rulesTableBody"></tbody>
+          </table>
+        </div>
+        <datalist id="rule-metrics">
+          <option value="cpu.total_pct"></option>
+          <option value="cpu.core0_pct"></option>
+          <option value="cpu.core1_pct"></option>
+          <option value="mem.ram.used_pct"></option>
+          <option value="mem.ram.used_bytes"></option>
+          <option value="mem.ram.total_bytes"></option>
+          <option value="mem.swap.used_pct"></option>
+          <option value="mem.swap.used_bytes"></option>
+          <option value="mem.swap.total_bytes"></option>
+          <option value="net.rx_bytes_per_sec"></option>
+          <option value="net.tx_bytes_per_sec"></option>
+          <option value="net.total_bytes_per_sec"></option>
+          <option value="disk.used_pct"></option>
+          <option value="disk.used_bytes"></option>
+          <option value="disk.total_bytes"></option>
+          <option value="disk.read_bytes_per_sec"></option>
+          <option value="disk.write_bytes_per_sec"></option>
+          <option value="proc.total"></option>
+          <option value="proc.new"></option>
+          <option value="proc.dead"></option>
+          <option value="file.events"></option>
+          <option value="persist.added"></option>
+          <option value="persist.changed"></option>
+          <option value="persist.removed"></option>
+          <option value="persist.total_changes"></option>
+        </datalist>
+        <div class="hint">Metric suggestions are available in the input. Message placeholders: {metric}, {value}, {threshold}</div>
         <div class="hint" id="rulesStatus"></div>
         <div style="display:flex;gap:8px;">
-          <button type="submit">Save</button>
+          <button type="submit" class="primary-button">Save</button>
           <button type="button" class="ghost" id="rulesRefresh">Reset</button>
         </div>
       </form>
@@ -762,6 +801,8 @@ small {
     const rulesRefresh = document.getElementById('rulesRefresh');
     const rulesForm = document.getElementById('rulesForm');
     const rulesStatus = document.getElementById('rulesStatus');
+    const rulesTableBody = document.getElementById('rulesTableBody');
+    const rulesAdd = document.getElementById('rulesAdd');
     const alertDetailModal = document.getElementById('alertDetailModal');
     const alertDetailClose = document.getElementById('alertDetailClose');
     const alertDetailAt = document.getElementById('alertDetailAt');
@@ -917,20 +958,62 @@ small {
       }
     }
 
-    function applyRulesToForm(data) {
-      if (!rulesForm || !data) return;
-      const setVal = (name, val) => {
-        const inp = rulesForm.querySelector('[name="' + name + '"]');
-        if (inp) inp.value = val;
-      };
-      setVal('cpu_high_pct', data.cpu_high_pct);
-      setVal('mem_ram_pct', data.mem_ram_pct);
-      setVal('mem_swap_pct', data.mem_swap_pct);
-      setVal('proc_burst', data.proc_burst);
-      const netMb = (data.net_spike_bps || 0) / (1024 * 1024);
-      setVal('net_spike_mb', netMb.toFixed(2));
-      setVal('file_events', data.file_events);
-      setVal('persist_changes', data.persist_changes);
+    function createRuleRow(rule) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="checkbox" class="rule-enabled" /></td>
+        <td><input type="text" class="rule-id" /></td>
+        <td><input type="text" class="rule-title" /></td>
+        <td>
+          <select class="rule-severity">
+            <option value="info">info</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="critical">critical</option>
+          </select>
+        </td>
+        <td><input type="text" class="rule-metric" placeholder="cpu.total_pct" list="rule-metrics" /></td>
+        <td>
+          <select class="rule-op">
+            <option value=">">&gt;</option>
+            <option value=">=">&gt;=</option>
+            <option value="<">&lt;</option>
+            <option value="<=">&lt;=</option>
+            <option value="==">==</option>
+            <option value="!=">!=</option>
+          </select>
+        </td>
+        <td><input type="number" class="rule-value" step="any" /></td>
+        <td><input type="text" class="rule-source" placeholder="CPU" /></td>
+        <td><input type="text" class="rule-message" placeholder="CPU {value}% exceeds {threshold}%" /></td>
+        <td><button type="button" class="ghost rule-remove">Remove</button></td>
+      `;
+      const enabled = rule.enabled !== false;
+      tr.querySelector('.rule-enabled').checked = enabled;
+      tr.querySelector('.rule-id').value = rule.id || '';
+      tr.querySelector('.rule-title').value = rule.title || '';
+      tr.querySelector('.rule-severity').value = (rule.severity || 'info').toLowerCase();
+      tr.querySelector('.rule-metric').value = rule.metric || '';
+      tr.querySelector('.rule-op').value = rule.op || '>=';
+      tr.querySelector('.rule-value').value = rule.value !== undefined ? rule.value : '';
+      tr.querySelector('.rule-source').value = rule.source || '';
+      tr.querySelector('.rule-message').value = rule.message || '';
+      tr.querySelector('.rule-remove').onclick = () => tr.remove();
+      return tr;
+    }
+
+    function renderRulesTable(rules) {
+      if (!rulesTableBody) return;
+      rulesTableBody.innerHTML = '';
+      (rules || []).forEach((rule) => {
+        rulesTableBody.appendChild(createRuleRow(rule));
+      });
+    }
+
+    function nextRuleId() {
+      if (!rulesTableBody) return 'custom.rule.1';
+      return 'custom.rule.' + (rulesTableBody.querySelectorAll('tr').length + 1);
     }
 
     async function loadRulesIntoForm() {
@@ -940,7 +1023,7 @@ small {
         if (!res.ok) throw new Error('load failed');
         const data = await res.json();
         lastRulesData = data;
-        applyRulesToForm(data);
+        renderRulesTable(data.rules || []);
         if (rulesStatus) rulesStatus.textContent = '';
       } catch (err) {
         if (rulesStatus) rulesStatus.textContent = 'Error loading rules';
@@ -958,16 +1041,26 @@ small {
     async function submitRules(e) {
       e.preventDefault();
       if (!rulesForm) return;
-      const formData = new FormData(rulesForm);
-      const payload = {
-        cpu_high_pct: parseFloat(formData.get('cpu_high_pct')) || 0,
-        mem_ram_pct: parseFloat(formData.get('mem_ram_pct')) || 0,
-        mem_swap_pct: parseFloat(formData.get('mem_swap_pct')) || 0,
-        proc_burst: parseInt(formData.get('proc_burst'), 10) || 0,
-        net_spike_bps: Math.round((parseFloat(formData.get('net_spike_mb')) || 0) * 1024 * 1024),
-        file_events: parseInt(formData.get('file_events'), 10) || 0,
-        persist_changes: parseInt(formData.get('persist_changes'), 10) || 0,
-      };
+      const payload = {rules: []};
+      if (rulesTableBody) {
+        const rows = rulesTableBody.querySelectorAll('tr');
+        rows.forEach((row) => {
+          const metric = row.querySelector('.rule-metric').value.trim();
+          if (!metric) return;
+          const rule = {
+            id: row.querySelector('.rule-id').value.trim(),
+            title: row.querySelector('.rule-title').value.trim(),
+            severity: row.querySelector('.rule-severity').value.trim(),
+            metric: metric,
+            op: row.querySelector('.rule-op').value.trim(),
+            value: parseFloat(row.querySelector('.rule-value').value) || 0,
+            source: row.querySelector('.rule-source').value.trim(),
+            message: row.querySelector('.rule-message').value.trim(),
+            enabled: row.querySelector('.rule-enabled').checked,
+          };
+          payload.rules.push(rule);
+        });
+      }
       try {
         const res = await fetch('/rules', {
           method: 'POST',
@@ -1053,6 +1146,18 @@ small {
     if (rulesForm) {
       rulesForm.addEventListener('submit', submitRules);
     }
+    if (rulesAdd) {
+      rulesAdd.addEventListener('click', () => {
+        if (!rulesTableBody) return;
+        rulesTableBody.appendChild(createRuleRow({
+          id: nextRuleId(),
+          severity: 'info',
+          op: '>=',
+          value: 0,
+          enabled: true,
+        }));
+      });
+    }
     autoBox.addEventListener('change', applyAuto);
     eventBox.addEventListener('change', () => applyEvent());
     input.addEventListener('change', applyAuto);
@@ -1063,7 +1168,7 @@ small {
       rulesRefresh.addEventListener('click', (e) => {
         e.preventDefault();
         if (lastRulesData) {
-          applyRulesToForm(lastRulesData);
+          renderRulesTable(lastRulesData.rules || []);
           if (rulesStatus) rulesStatus.textContent = '';
           return;
         }

@@ -4,7 +4,6 @@ go 1.25.5
 
 require (
 	github.com/shirou/gopsutil/v4 v4.25.11
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

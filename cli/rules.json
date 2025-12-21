@@ -1,0 +1,94 @@
+{
+  "rules": [
+    {
+      "id": "cpu.high_usage",
+      "title": "High CPU usage",
+      "severity": "medium",
+      "metric": "cpu.total_pct",
+      "op": "\u003e=",
+      "value": 1,
+      "message": "CPU usage {value}% exceeds threshold {threshold}%",
+      "enabled": true
+    },
+    {
+      "id": "mem.high_usage",
+      "title": "High RAM usage",
+      "severity": "medium",
+      "metric": "mem.ram.used_pct",
+      "op": "\u003e=",
+      "value": 90,
+      "message": "RAM usage {value}% exceeds {threshold}%",
+      "enabled": true
+    },
+    {
+      "id": "mem.swap_pressure",
+      "title": "Swap pressure",
+      "severity": "low",
+      "metric": "mem.swap.used_pct",
+      "op": "\u003e=",
+      "value": 60,
+      "message": "Swap usage {value}% exceeds {threshold}%",
+      "enabled": true
+    },
+    {
+      "id": "proc.burst",
+      "title": "Process burst",
+      "severity": "medium",
+      "metric": "proc.new",
+      "op": "\u003e=",
+      "value": 10,
+      "message": "{value} new processes detected (limit {threshold})",
+      "enabled": true
+    },
+    {
+      "id": "net.spike",
+      "title": "Network spike",
+      "severity": "low",
+      "metric": "net.total_bytes_per_sec",
+      "op": "\u003e=",
+      "value": 1048576,
+      "message": "Network throughput {value}B/s exceeds {threshold}B/s",
+      "enabled": true
+    },
+    {
+      "id": "file.events_burst",
+      "title": "File change burst",
+      "severity": "low",
+      "metric": "file.events",
+      "op": "\u003e=",
+      "value": 50,
+      "message": "{value} file events detected (limit {threshold})",
+      "enabled": true
+    },
+    {
+      "id": "persist.change",
+      "title": "Persistence changes",
+      "severity": "low",
+      "metric": "persist.total_changes",
+      "op": "\u003e=",
+      "value": 1,
+      "message": "Persistence entries changed (total {value})",
+      "enabled": true
+    },
+    {
+      "id": "custom.rule.8",
+      "title": "Low CPU usage",
+      "severity": "info",
+      "metric": "cpu.total_pct",
+      "op": "\u003c=",
+      "value": 0.4,
+      "message": "",
+      "enabled": true
+    },
+    {
+      "id": "custom.rule.9",
+      "title": "CPUT 2",
+      "severity": "info",
+      "metric": "cpu.core4_pct",
+      "op": "\u003e=",
+      "value": 0,
+      "message": "CPU 2",
+      "enabled": true
+    }
+  ]
+}

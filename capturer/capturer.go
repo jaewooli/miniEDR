@@ -1,12 +1,11 @@
 package capturer
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // InfoData carries both human readable text and structured metrics to avoid downstream string parsing.
@@ -129,7 +128,7 @@ func (cb *CapturersBuilder) loadConfig() (CapturersConfig, error) {
 		return cfg, nil
 	}
 
-	if err := yaml.Unmarshal([]byte(raw), &cfg); err != nil {
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 		return cfg, fmt.Errorf("parse config: %w", err)
 	}
 	return cfg, nil
