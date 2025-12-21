@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jaewooli/miniedr"
 	"github.com/jaewooli/miniedr/capturer"
 )
 
@@ -119,5 +120,95 @@ func BenchmarkCorrelateAlerts1000(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = correlateAlerts(entries, intervals, 2*time.Second)
+	}
+}
+
+type benchAlertCapturer struct {
+	info capturer.InfoData
+}
+
+func (b *benchAlertCapturer) Capture() error { return nil }
+func (b *benchAlertCapturer) GetInfo() (capturer.InfoData, error) {
+	return b.info, nil
+}
+
+func BenchmarkAlertHistoryUpdate(b *testing.B) {
+	info := capturer.InfoData{
+		Summary: "bench",
+		Meta:    capturer.TelemetryMeta{CapturedAt: time.Unix(100, 0)},
+	}
+	cap := &benchAlertCapturer{info: info}
+	ds := NewDashboardServer(capturer.Capturers{cap}, "bench", false)
+	ds.rulesPath = ""
+	ds.metricsPath = ""
+	ds.mu.Lock()
+	ds.detector = &miniedr.Detector{
+		Rules: []miniedr.RuleSpec{{
+			ID:       "bench.alert",
+			Title:    "Bench Alert",
+			Severity: miniedr.SeverityInfo,
+			Eval: func(info capturer.InfoData) []miniedr.Alert {
+				return []miniedr.Alert{{
+					RuleID:  "bench.alert",
+					Title:   "Bench Alert",
+					Message: "bench",
+					At:      info.Meta.CapturedAt,
+				}}
+			},
+		}},
+	}
+	ds.mu.Unlock()
+	ref := time.Unix(200, 0).Format(time.RFC3339)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ds.captureSingle(cap, ref, "bench", false, false, 0, false, 0)
+	}
+}
+
+func BenchmarkAlertHistoryToEvent(b *testing.B) {
+	info := capturer.InfoData{
+		Summary: "bench",
+		Meta:    capturer.TelemetryMeta{CapturedAt: time.Unix(100, 0)},
+	}
+	cap := &benchAlertCapturer{info: info}
+	ds := NewDashboardServer(capturer.Capturers{cap}, "bench", false)
+	ds.rulesPath = ""
+	ds.metricsPath = ""
+	ds.mu.Lock()
+	ds.detector = &miniedr.Detector{
+		Rules: []miniedr.RuleSpec{{
+			ID:       "bench.alert",
+			Title:    "Bench Alert",
+			Severity: miniedr.SeverityInfo,
+			Eval: func(info capturer.InfoData) []miniedr.Alert {
+				return []miniedr.Alert{{
+					RuleID:  "bench.alert",
+					Title:   "Bench Alert",
+					Message: "bench",
+					At:      info.Meta.CapturedAt,
+				}}
+			},
+		}},
+	}
+	ch := make(chan string, 2)
+	ds.clients[ch] = struct{}{}
+	ds.mu.Unlock()
+	ref := time.Unix(200, 0).Format(time.RFC3339)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for {
+			select {
+			case <-ch:
+				continue
+			default:
+			}
+			break
+		}
+		ds.captureSingle(cap, ref, "bench", false, false, 0, false, 0)
+		<-ch
 	}
 }

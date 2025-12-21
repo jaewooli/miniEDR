@@ -76,17 +76,6 @@
       "message": "Persistence entries changed (total {value})",
       "source": "PERSIST",
       "enabled": true
-    },
-    {
-      "id": "custom.rule.8",
-      "title": "CPUCPU",
-      "severity": "info",
-      "metric": "cpu.core0_pct",
-      "op": "!=",
-      "value": 0,
-      "message": "CPUCPUCPU",
-      "source": "CPU",
-      "enabled": true
     }
   ]
 }

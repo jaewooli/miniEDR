@@ -16,20 +16,27 @@ type CPUSnapshot struct {
 	At      time.Time
 	PerCore []cpu.TimesStat // cpu.Times(percpu=true)
 	Total   []cpu.TimesStat // cpu.Times(percpu=false) -> len=1
+	TotalPct    float64
+	PerCorePct  []float64
+	HasPercent  bool
+	HasPerCore  bool
 }
 
 type CPUCapturer struct {
 	Now     func() time.Time
 	TimesFn func(percpu bool) ([]cpu.TimesStat, error)
+	PercentFn func(interval time.Duration, percpu bool) ([]float64, error)
 
 	prev *CPUSnapshot
 	curr *CPUSnapshot
+	percentWarm bool
 }
 
 func NewCPUCapturer() *CPUCapturer {
 	return &CPUCapturer{
 		Now:     time.Now,
 		TimesFn: cpu.Times,
+		PercentFn: cpu.Percent,
 	}
 }
 
@@ -55,6 +62,22 @@ func (c *CPUCapturer) Capture() error {
 		PerCore: per,
 		Total:   tot,
 	}
+	if c.PercentFn != nil {
+		if pct, err := c.PercentFn(0, true); err == nil && len(pct) > 0 {
+			if c.percentWarm {
+				snap.PerCorePct = append([]float64{}, pct...)
+				snap.HasPerCore = true
+				sum := 0.0
+				for _, v := range pct {
+					sum += v
+				}
+				snap.TotalPct = sum / float64(len(pct))
+				snap.HasPercent = true
+			} else {
+				c.percentWarm = true
+			}
+		}
+	}
 
 	c.prev = c.curr
 	c.curr = snap
@@ -68,9 +91,12 @@ func (c *CPUCapturer) GetInfo() (InfoData, error) {
 
 	metrics := make(map[string]float64)
 
-	// 델타 기반 usage% 계산(가능하면)
+	// usage% 계산: percent API가 준비되면 그 값을 우선 사용
 	totalUsage := "n/a"
-	if c.prev != nil && len(c.prev.Total) == 1 && len(c.curr.Total) == 1 {
+	if c.curr.HasPercent {
+		metrics["cpu.total_pct"] = c.curr.TotalPct
+		totalUsage = fmt.Sprintf("%.2f%%", c.curr.TotalPct)
+	} else if c.prev != nil && len(c.prev.Total) == 1 && len(c.curr.Total) == 1 {
 		u := cpuUsagePct(c.prev.Total[0], c.curr.Total[0])
 		if !math.IsNaN(u) {
 			metrics["cpu.total_pct"] = u
@@ -80,7 +106,23 @@ func (c *CPUCapturer) GetInfo() (InfoData, error) {
 
 	// 코어별은 너무 길어질 수 있어 summary는 top 몇 개만 표기
 	coreInfo := ""
-	if c.prev != nil && len(c.prev.PerCore) == len(c.curr.PerCore) && len(c.curr.PerCore) > 0 {
+	if c.curr.HasPerCore && len(c.curr.PerCorePct) > 0 {
+		var b strings.Builder
+		for i := 0; i < len(c.curr.PerCorePct); i++ {
+			u := c.curr.PerCorePct[i]
+			if math.IsNaN(u) {
+				continue
+			}
+			metrics[fmt.Sprintf("cpu.core%d_pct", i)] = u
+			if i < 4 {
+				fmt.Fprintf(&b, "cpu%d=%.1f%% ", i, u)
+			}
+		}
+		coreInfo = strings.TrimSpace(b.String())
+		if coreInfo != "" {
+			coreInfo = ", " + coreInfo
+		}
+	} else if c.prev != nil && len(c.prev.PerCore) == len(c.curr.PerCore) && len(c.curr.PerCore) > 0 {
 		var b strings.Builder
 		for i := 0; i < len(c.curr.PerCore); i++ {
 			u := cpuUsagePct(c.prev.PerCore[i], c.curr.PerCore[i])
@@ -111,7 +153,7 @@ func (c *CPUCapturer) GetInfo() (InfoData, error) {
 	return InfoData{Summary: summary, Metrics: metrics}, nil
 }
 
-// GetVerboseInfo returns per-core usage and times for detailed output.
+	// GetVerboseInfo returns per-core usage and times for detailed output.
 func (c *CPUCapturer) GetVerboseInfo() (string, error) {
 	if c.curr == nil {
 		return "CPUSnapshot(verbose-empty)", nil
@@ -120,7 +162,9 @@ func (c *CPUCapturer) GetVerboseInfo() (string, error) {
 	var b strings.Builder
 
 	totalUsage := "n/a"
-	if c.prev != nil && len(c.prev.Total) == 1 && len(c.curr.Total) == 1 {
+	if c.curr.HasPercent {
+		totalUsage = fmt.Sprintf("%.2f%%", c.curr.TotalPct)
+	} else if c.prev != nil && len(c.prev.Total) == 1 && len(c.curr.Total) == 1 {
 		if u := cpuUsagePct(c.prev.Total[0], c.curr.Total[0]); !math.IsNaN(u) {
 			totalUsage = fmt.Sprintf("%.2f%%", u)
 		}
@@ -139,7 +183,9 @@ func (c *CPUCapturer) GetVerboseInfo() (string, error) {
 	per := c.curr.PerCore
 	for i, t := range per {
 		usage := "n/a"
-		if c.prev != nil && len(c.prev.PerCore) == len(per) {
+		if c.curr.HasPerCore && i < len(c.curr.PerCorePct) {
+			usage = fmt.Sprintf("%.2f%%", c.curr.PerCorePct[i])
+		} else if c.prev != nil && len(c.prev.PerCore) == len(per) {
 			if u := cpuUsagePct(c.prev.PerCore[i], t); !math.IsNaN(u) {
 				usage = fmt.Sprintf("%.2f%%", u)
 			}

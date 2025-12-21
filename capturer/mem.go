@@ -76,11 +76,8 @@ func (m *MEMCapturer) GetInfo() (InfoData, error) {
 	v := m.snapshot.Virtual
 	s := m.snapshot.Swap
 
-	used := v.Total - v.Available
-	usedPct := 0.0
-	if v.Total > 0 {
-		usedPct = float64(used) / float64(v.Total) * 100
-	}
+	used := v.Used
+	usedPct := v.UsedPercent
 	swapPct := 0.0
 	if s.Total > 0 {
 		swapPct = float64(s.Used) / float64(s.Total) * 100
