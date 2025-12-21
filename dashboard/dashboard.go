@@ -76,12 +76,17 @@ type dashboardLogEntry struct {
 }
 
 type dashboardAlertEntry struct {
+	ID       string
 	At       string
+	AtTime   time.Time
 	Severity miniedr.AlertSeverity
 	Title    string
 	Message  string
 	RuleID   string
 	Source   string
+	Evidence string
+	Meta     string
+	Related  string
 }
 
 type graphInfo struct {
@@ -384,21 +389,47 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 			if source == "" {
 				source = alert.Meta.Capturer
 			}
+			evidenceJSON := "{}"
+			if alert.Evidence != nil {
+				if b, err := json.Marshal(alert.Evidence); err == nil {
+					evidenceJSON = string(b)
+				}
+			}
+			metaJSON := "{}"
+			if b, err := json.Marshal(alert.Meta); err == nil {
+				metaJSON = string(b)
+			}
+			relatedJSON := "[]"
+			if len(alert.Correlated) > 0 {
+				if b, err := json.Marshal(alert.Correlated); err == nil {
+					relatedJSON = string(b)
+				}
+			}
 			entry := dashboardAlertEntry{
+				ID:       alert.ID,
 				At:       at.Local().Format("2006-01-02 15:04:05"),
+				AtTime:   at,
 				Severity: alert.Severity,
 				Title:    alert.Title,
 				Message:  alert.Message,
 				RuleID:   alert.RuleID,
 				Source:   source,
+				Evidence: evidenceJSON,
+				Meta:     metaJSON,
+				Related:  relatedJSON,
 			}
 			history = append(history, dashboardAlertEntry{
+				ID:       entry.ID,
 				At:       entry.At,
+				AtTime:   entry.AtTime,
 				Severity: entry.Severity,
 				Title:    entry.Title,
 				Message:  entry.Message,
 				RuleID:   entry.RuleID,
 				Source:   entry.Source,
+				Evidence: entry.Evidence,
+				Meta:     entry.Meta,
+				Related:  entry.Related,
 			})
 			d.globalAlerts = append(d.globalAlerts, entry)
 		}
@@ -439,11 +470,13 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 		return items[i].Name < items[j].Name
 	})
 
+	globalAlerts := append([]dashboardAlertEntry{}, d.globalAlerts...)
+	globalAlerts = correlateAlerts(globalAlerts, d.itemIntervals, d.displayInterval)
 	d.snapshot = dashboardData{
 		Title:             title,
 		RefreshedAt:       ref,
 		Items:             items,
-		GlobalAlerts:      append([]dashboardAlertEntry{}, d.globalAlerts...),
+		GlobalAlerts:      globalAlerts,
 		AutoRefresh:       autoRefresh,
 		RefreshSecs:       refreshSecs,
 		EventRefresh:      eventRefresh,
@@ -460,6 +493,104 @@ func (d *DashboardServer) currentSnapshot() dashboardData {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.snapshot
+}
+
+func correlateAlerts(entries []dashboardAlertEntry, intervals map[string]time.Duration, defaultInterval time.Duration) []dashboardAlertEntry {
+	if len(entries) == 0 {
+		return entries
+	}
+	if intervals == nil {
+		intervals = make(map[string]time.Duration)
+	}
+	related := make([][]string, len(entries))
+	for i := 0; i < len(entries); i++ {
+		for j := i + 1; j < len(entries); j++ {
+			if !alertsOverlap(entries[i], entries[j], intervals, defaultInterval) {
+				continue
+			}
+			if entries[i].ID != "" && entries[j].ID != "" {
+				related[i] = append(related[i], entries[j].ID)
+				related[j] = append(related[j], entries[i].ID)
+			}
+		}
+	}
+
+	out := make([]dashboardAlertEntry, len(entries))
+	for i, entry := range entries {
+		out[i] = entry
+		out[i].Related = mergeRelatedJSON(entry.Related, related[i])
+	}
+	return out
+}
+
+func alertsOverlap(a, b dashboardAlertEntry, intervals map[string]time.Duration, defaultInterval time.Duration) bool {
+	if a.AtTime.IsZero() || b.AtTime.IsZero() {
+		return false
+	}
+	ia := intervalForAlert(a, intervals, defaultInterval)
+	ib := intervalForAlert(b, intervals, defaultInterval)
+	aAt := a.AtTime.Truncate(time.Second)
+	bAt := b.AtTime.Truncate(time.Second)
+	aStart := aAt.Add(-ia)
+	bStart := bAt.Add(-ib)
+	start := aStart
+	if bStart.After(start) {
+		start = bStart
+	}
+	end := aAt
+	if bAt.Before(end) {
+		end = bAt
+	}
+	return end.Sub(start) >= time.Second
+}
+
+func intervalForAlert(entry dashboardAlertEntry, intervals map[string]time.Duration, defaultInterval time.Duration) time.Duration {
+	interval := intervals[entry.Source]
+	if interval <= 0 {
+		interval = defaultInterval
+	}
+	if interval <= 0 {
+		interval = time.Second
+	}
+	return interval
+}
+
+func mergeRelatedJSON(existing string, derived []string) string {
+	merged := make([]string, 0, len(derived))
+	seen := make(map[string]struct{})
+	if existing != "" {
+		var list []string
+		if err := json.Unmarshal([]byte(existing), &list); err == nil {
+			for _, v := range list {
+				if v == "" {
+					continue
+				}
+				if _, ok := seen[v]; ok {
+					continue
+				}
+				seen[v] = struct{}{}
+				merged = append(merged, v)
+			}
+		}
+	}
+	for _, v := range derived {
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		merged = append(merged, v)
+	}
+	if len(merged) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(merged)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }
 
 func (d *DashboardServer) captureLoop(ctx context.Context) {

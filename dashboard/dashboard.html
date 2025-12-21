@@ -418,6 +418,28 @@ small {
   gap: 6px;
   margin-bottom:2px;
   flex-wrap: wrap;
+  cursor: pointer;
+}
+.alert-detail-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-top: 12px;
+}
+.alert-detail-label {
+  display: block;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+.alert-detail-pre {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: 6px;
 }
 .severity-info { background: #38bdf8; color: #0b1220; }
 .severity-low { background: #a3e635; color: #0b1220; }
@@ -500,7 +522,7 @@ small {
         {{if .GlobalAlerts}}
           <ul class="alert-list" id="alertHistoryList">
             {{range .GlobalAlerts}}
-              <li data-severity="{{.Severity}}" data-rule="{{.RuleID}}" data-source="{{.Source}}" data-text="{{.Title}} {{.Message}} {{.RuleID}} {{.Source}}">
+              <li data-id="{{.ID}}" data-severity="{{.Severity}}" data-rule="{{.RuleID}}" data-source="{{.Source}}" data-title="{{.Title}}" data-message="{{.Message}}" data-at="{{.At}}" data-text="{{.Title}} {{.Message}} {{.RuleID}} {{.Source}}" data-evidence="{{.Evidence}}" data-meta="{{.Meta}}" data-related="{{.Related}}">
                 <span class="pill severity-{{.Severity}}">{{.Severity}}</span>
                 <strong>{{.Title}}</strong> — {{.Message}}
                 <span class="hint">{{.At}}</span>
@@ -674,6 +696,58 @@ small {
       </form>
     </div>
   </div>
+
+  <div id="alertDetailModal" class="modal">
+    <div class="modal-content">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div class="title" style="font-size:20px;">Alert detail</div>
+          <div class="hint" id="alertDetailAt"></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="ghost" id="alertDetailClose">Close</button>
+        </div>
+      </div>
+      <div class="alert-detail-grid">
+        <div>
+          <span class="alert-detail-label">Severity</span>
+          <span class="pill" id="alertDetailSeverity"></span>
+        </div>
+        <div>
+          <span class="alert-detail-label">Rule</span>
+          <div id="alertDetailRule"></div>
+        </div>
+        <div>
+          <span class="alert-detail-label">Source</span>
+          <div id="alertDetailSource"></div>
+        </div>
+        <div>
+          <span class="alert-detail-label">ID</span>
+          <div id="alertDetailId"></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <span class="alert-detail-label">Title</span>
+        <div id="alertDetailTitle"></div>
+      </div>
+      <div style="margin-top:12px;">
+        <span class="alert-detail-label">Message</span>
+        <div id="alertDetailMessage"></div>
+      </div>
+      <div style="margin-top:12px;">
+        <span class="alert-detail-label">Evidence</span>
+        <pre class="alert-detail-pre" id="alertDetailEvidence"></pre>
+      </div>
+      <div style="margin-top:12px;">
+        <span class="alert-detail-label">Meta</span>
+        <pre class="alert-detail-pre" id="alertDetailMeta"></pre>
+      </div>
+      <div style="margin-top:12px;">
+        <span class="alert-detail-label">Correlated</span>
+        <pre class="alert-detail-pre" id="alertDetailRelated"></pre>
+      </div>
+    </div>
+  </div>
 </body>
 <script>
   (function() {
@@ -688,8 +762,21 @@ small {
     const rulesRefresh = document.getElementById('rulesRefresh');
     const rulesForm = document.getElementById('rulesForm');
     const rulesStatus = document.getElementById('rulesStatus');
+    const alertDetailModal = document.getElementById('alertDetailModal');
+    const alertDetailClose = document.getElementById('alertDetailClose');
+    const alertDetailAt = document.getElementById('alertDetailAt');
+    const alertDetailSeverity = document.getElementById('alertDetailSeverity');
+    const alertDetailRule = document.getElementById('alertDetailRule');
+    const alertDetailSource = document.getElementById('alertDetailSource');
+    const alertDetailId = document.getElementById('alertDetailId');
+    const alertDetailTitle = document.getElementById('alertDetailTitle');
+    const alertDetailMessage = document.getElementById('alertDetailMessage');
+    const alertDetailEvidence = document.getElementById('alertDetailEvidence');
+    const alertDetailMeta = document.getElementById('alertDetailMeta');
+    const alertDetailRelated = document.getElementById('alertDetailRelated');
     let alertFilterState = {severity: '', text: ''};
     let rulesBackdropPress = false;
+    let alertBackdropPress = false;
     const storageKeyAuto = 'miniedr:auto';
     const storageKeyAutoInterval = 'miniedr:autoInterval';
     const storageKeyEvent = 'miniedr:event';
@@ -733,6 +820,65 @@ small {
         textInput.value = alertFilterState.text;
       }
       applyFilter();
+      wireAlertDetails();
+    }
+
+    function formatDetail(value, emptyLabel) {
+      if (!value) return emptyLabel;
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed) && parsed.length === 0) return emptyLabel;
+        if (!Array.isArray(parsed) && parsed && typeof parsed === 'object' && Object.keys(parsed).length === 0) {
+          return emptyLabel;
+        }
+        return JSON.stringify(parsed, null, 2);
+      } catch (_) {
+        return value;
+      }
+    }
+
+    function openAlertDetail(li) {
+      if (!li || !alertDetailModal) return;
+      const sev = li.getAttribute('data-severity') || '';
+      const rule = li.getAttribute('data-rule') || '';
+      const src = li.getAttribute('data-source') || '';
+      const id = li.getAttribute('data-id') || '';
+      const at = li.getAttribute('data-at') || '';
+      const title = li.getAttribute('data-title') || '';
+      const msg = li.getAttribute('data-message') || '';
+      if (alertDetailAt) alertDetailAt.textContent = at;
+      if (alertDetailSeverity) {
+        alertDetailSeverity.textContent = sev || 'unknown';
+        alertDetailSeverity.className = 'pill severity-' + (sev || 'info');
+      }
+      if (alertDetailRule) alertDetailRule.textContent = rule;
+      if (alertDetailSource) alertDetailSource.textContent = src;
+      if (alertDetailId) alertDetailId.textContent = id;
+      if (alertDetailTitle) alertDetailTitle.textContent = title;
+      if (alertDetailMessage) alertDetailMessage.textContent = msg;
+      if (alertDetailEvidence) {
+        alertDetailEvidence.textContent = formatDetail(li.getAttribute('data-evidence'), 'No evidence captured.');
+      }
+      if (alertDetailMeta) {
+        alertDetailMeta.textContent = formatDetail(li.getAttribute('data-meta'), 'No meta captured.');
+      }
+      if (alertDetailRelated) {
+        alertDetailRelated.textContent = formatDetail(li.getAttribute('data-related'), 'No correlated alerts.');
+      }
+      alertDetailModal.classList.add('show');
+    }
+
+    function closeAlertDetail() {
+      if (alertDetailModal) alertDetailModal.classList.remove('show');
+    }
+
+    function wireAlertDetails() {
+      const list = document.getElementById('alertHistoryList');
+      if (!list) return;
+      const items = list.querySelectorAll('li');
+      items.forEach((li) => {
+        li.onclick = () => openAlertDetail(li);
+      });
     }
 
     async function refreshView() {
@@ -937,6 +1083,19 @@ small {
         rulesBackdropPress = false;
       });
     }
+    if (alertDetailModal) {
+      alertDetailModal.addEventListener('mousedown', (e) => {
+        alertBackdropPress = e.target === alertDetailModal;
+      });
+      alertDetailModal.addEventListener('mouseup', (e) => {
+        if (alertBackdropPress && e.target === alertDetailModal) closeAlertDetail();
+        alertBackdropPress = false;
+      });
+      alertDetailModal.addEventListener('mouseleave', () => {
+        alertBackdropPress = false;
+      });
+    }
+    if (alertDetailClose) alertDetailClose.onclick = closeAlertDetail;
 
     wireAlertFilters();
     applyAuto();
