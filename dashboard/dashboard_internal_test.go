@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -181,6 +183,65 @@ func TestRulesHandlerRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gotAfter, update) {
 		t.Fatalf("GET /rules after update = %+v, want %+v", gotAfter, update)
+	}
+}
+
+func TestMetricsHandlerRoundTrip(t *testing.T) {
+	ds := NewDashboardServer(capturer.Capturers{}, "TestDash", false)
+	tmpDir := t.TempDir()
+	ds.metricsPath = filepath.Join(tmpDir, "metrics.json")
+
+	initial := []string{"cpu.total_pct", " net.rx_bytes_per_sec ", "cpu.total_pct", ""}
+	data, err := json.MarshalIndent(initial, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal initial metrics: %v", err)
+	}
+	if err := os.WriteFile(ds.metricsPath, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("write metrics.json: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	w := httptest.NewRecorder()
+	ds.handleMetrics(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /metrics status = %d", w.Code)
+	}
+	var got []string
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode GET /metrics: %v", err)
+	}
+	want := []string{"cpu.total_pct", "net.rx_bytes_per_sec"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("GET /metrics = %+v, want %+v", got, want)
+	}
+
+	update := []string{"mem.ram.used_pct", "cpu.total_pct"}
+	body, _ := json.Marshal(update)
+	req = httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
+	w = httptest.NewRecorder()
+	ds.handleMetrics(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST /metrics status = %d", w.Code)
+	}
+	var gotAfter []string
+	if err := json.NewDecoder(w.Body).Decode(&gotAfter); err != nil {
+		t.Fatalf("decode POST /metrics: %v", err)
+	}
+	wantAfter := []string{"cpu.total_pct", "mem.ram.used_pct"}
+	if !reflect.DeepEqual(gotAfter, wantAfter) {
+		t.Fatalf("POST /metrics = %+v, want %+v", gotAfter, wantAfter)
+	}
+
+	disk, err := os.ReadFile(ds.metricsPath)
+	if err != nil {
+		t.Fatalf("read metrics.json: %v", err)
+	}
+	var onDisk []string
+	if err := json.Unmarshal(disk, &onDisk); err != nil {
+		t.Fatalf("decode metrics.json: %v", err)
+	}
+	if !reflect.DeepEqual(onDisk, wantAfter) {
+		t.Fatalf("metrics.json = %+v, want %+v", onDisk, wantAfter)
 	}
 }
 

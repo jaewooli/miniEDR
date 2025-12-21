@@ -350,13 +350,84 @@ small {
 .rules-toolbar {
   display: flex;
   gap: 8px;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+.rules-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 12px;
+}
+.rules-layout .rules-table-wrap,
+.rules-layout .metrics-panel {
+  align-self: start;
+}
+@media (max-width: 900px) {
+  .rules-layout {
+    grid-template-columns: 1fr;
+  }
+  .rules-table {
+    min-width: 700px;
+  }
+}
+.metrics-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.metrics-controls input {
+  min-width: 220px;
+  background: #0b1220;
+  color: #e5e7eb;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
+.metrics-panel {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  padding: 10px;
+  background: linear-gradient(165deg, rgba(15, 23, 42, 0.65), rgba(30, 41, 59, 0.35));
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+}
+.metrics-panel .metrics-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #e5e7eb;
+}
+.metrics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.metrics-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.metrics-row input {
+  flex: 1 1 auto;
+  background: #0b1220;
+  color: #e5e7eb;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  padding: 6px 8px;
+  box-sizing: border-box;
 }
 .rules-table-wrap {
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 12px;
   overflow: auto;
-  background: rgba(15, 23, 42, 0.6);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.45));
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
 }
 .rules-table {
   width: 100%;
@@ -370,11 +441,18 @@ small {
   text-align: left;
   vertical-align: top;
 }
+.rules-table tbody tr:nth-child(odd) {
+  background: rgba(15, 23, 42, 0.2);
+}
 .rules-table th {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
   color: #94a3b8;
+  background: rgba(15, 23, 42, 0.85);
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 .rules-table input,
 .rules-table select {
@@ -492,7 +570,7 @@ small {
   overflow: auto;
 }
 #rulesModal .modal-content {
-  width: min(1200px, 94vw);
+  width: min(1280px, 96vw);
 }
 </style>
 </head>
@@ -678,55 +756,41 @@ small {
       </div>
       <form id="rulesForm" class="rules-form">
         <div class="rules-toolbar">
+          <div class="metrics-controls">
+            <input type="text" id="metricsInput" placeholder="new.metric.name" />
+            <button type="button" class="ghost" id="metricsAdd">Add metric</button>
+          </div>
           <button type="button" class="ghost" id="rulesAdd">Add rule</button>
         </div>
-        <div class="rules-table-wrap">
-          <table class="rules-table">
-            <thead>
-              <tr>
-                <th>On</th>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Severity</th>
-                <th>Metric</th>
-                <th>Op</th>
-                <th>Value</th>
-                <th>Source</th>
-                <th>Message</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="rulesTableBody"></tbody>
-          </table>
+        <div class="rules-layout">
+          <div class="metrics-panel">
+            <div class="metrics-title">Metrics</div>
+            <div class="hint" id="metricsCount"></div>
+            <div id="metricsList" class="metrics-list"></div>
+            <div class="hint" id="metricsStatus"></div>
+          </div>
+          <div class="rules-table-wrap">
+            <table class="rules-table">
+              <thead>
+                <tr>
+                  <th>On</th>
+                  <th>ID</th>
+                  <th>Title</th>
+                  <th>Severity</th>
+                  <th>Metric</th>
+                  <th>Op</th>
+                  <th>Value</th>
+                  <th>Source</th>
+                  <th>Message</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="rulesTableBody"></tbody>
+            </table>
+          </div>
         </div>
-        <datalist id="rule-metrics">
-          <option value="cpu.total_pct"></option>
-          <option value="cpu.core0_pct"></option>
-          <option value="cpu.core1_pct"></option>
-          <option value="mem.ram.used_pct"></option>
-          <option value="mem.ram.used_bytes"></option>
-          <option value="mem.ram.total_bytes"></option>
-          <option value="mem.swap.used_pct"></option>
-          <option value="mem.swap.used_bytes"></option>
-          <option value="mem.swap.total_bytes"></option>
-          <option value="net.rx_bytes_per_sec"></option>
-          <option value="net.tx_bytes_per_sec"></option>
-          <option value="net.total_bytes_per_sec"></option>
-          <option value="disk.used_pct"></option>
-          <option value="disk.used_bytes"></option>
-          <option value="disk.total_bytes"></option>
-          <option value="disk.read_bytes_per_sec"></option>
-          <option value="disk.write_bytes_per_sec"></option>
-          <option value="proc.total"></option>
-          <option value="proc.new"></option>
-          <option value="proc.dead"></option>
-          <option value="file.events"></option>
-          <option value="persist.added"></option>
-          <option value="persist.changed"></option>
-          <option value="persist.removed"></option>
-          <option value="persist.total_changes"></option>
-        </datalist>
-        <div class="hint">Metric suggestions are available in the input. Message placeholders: {metric}, {value}, {threshold}</div>
+        <datalist id="rule-metrics"></datalist>
+        <div class="hint">Metric suggestions come from metrics.json. Message placeholders: {metric}, {value}, {threshold}</div>
         <div class="hint" id="rulesStatus"></div>
         <div style="display:flex;gap:8px;">
           <button type="submit" class="primary-button">Save</button>
@@ -803,6 +867,12 @@ small {
     const rulesStatus = document.getElementById('rulesStatus');
     const rulesTableBody = document.getElementById('rulesTableBody');
     const rulesAdd = document.getElementById('rulesAdd');
+    const ruleMetrics = document.getElementById('rule-metrics');
+    const metricsInput = document.getElementById('metricsInput');
+    const metricsAdd = document.getElementById('metricsAdd');
+    const metricsList = document.getElementById('metricsList');
+    const metricsStatus = document.getElementById('metricsStatus');
+    const metricsCount = document.getElementById('metricsCount');
     const alertDetailModal = document.getElementById('alertDetailModal');
     const alertDetailClose = document.getElementById('alertDetailClose');
     const alertDetailAt = document.getElementById('alertDetailAt');
@@ -1030,8 +1100,100 @@ small {
       }
     }
 
+    function updateMetricsDatalist(list) {
+      if (!ruleMetrics) return;
+      ruleMetrics.innerHTML = '';
+      (list || []).forEach((metric) => {
+        const opt = document.createElement('option');
+        opt.value = metric;
+        ruleMetrics.appendChild(opt);
+      });
+    }
+
+    function collectMetricsFromList() {
+      if (!metricsList) return [];
+      const inputs = metricsList.querySelectorAll('input');
+      const seen = new Set();
+      const out = [];
+      inputs.forEach((input) => {
+        const val = input.value.trim();
+        if (!val || seen.has(val)) return;
+        seen.add(val);
+        out.push(val);
+      });
+      return out;
+    }
+
+    function renderMetricsList(list) {
+      if (!metricsList) return;
+      metricsList.innerHTML = '';
+      (list || []).forEach((metric) => {
+        const row = document.createElement('div');
+        row.className = 'metrics-row';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = metric;
+        input.addEventListener('change', () => persistMetrics());
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'ghost';
+        remove.textContent = 'Remove';
+        remove.addEventListener('click', () => {
+          row.remove();
+          persistMetrics();
+        });
+        row.appendChild(input);
+        row.appendChild(remove);
+        metricsList.appendChild(row);
+      });
+      if (metricsCount) {
+        const count = (list || []).length;
+        metricsCount.textContent = count + " metric" + (count === 1 ? "" : "s") + " available";
+      }
+    }
+
+    async function persistMetrics() {
+      const payload = collectMetricsFromList();
+      try {
+        const res = await fetch('/metrics', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+        const text = await res.text();
+        if (!res.ok) throw new Error(text || 'failed to save metrics');
+        let data = [];
+        try { data = JSON.parse(text); } catch (_) {}
+        updateMetricsDatalist(data);
+        renderMetricsList(data);
+        if (metricsStatus) {
+          const ts = new Date().toLocaleTimeString();
+          metricsStatus.textContent = "Metrics saved at " + ts;
+        }
+      } catch (err) {
+        if (metricsStatus) {
+          metricsStatus.textContent = "Metrics error: " + err.message;
+        }
+      }
+    }
+
+    async function loadMetricsList() {
+      if (!ruleMetrics) return;
+      try {
+        const res = await fetch('/metrics', {cache: 'no-store'});
+        if (!res.ok) throw new Error('load failed');
+        const data = await res.json();
+        updateMetricsDatalist(data);
+        renderMetricsList(data);
+      } catch (err) {
+        updateMetricsDatalist([]);
+        renderMetricsList([]);
+      }
+    }
+
     function openRules() {
       if (rulesModal) rulesModal.classList.add('show');
+      loadMetricsList();
       loadRulesIntoForm();
     }
     function closeRules() {
@@ -1145,6 +1307,32 @@ small {
 
     if (rulesForm) {
       rulesForm.addEventListener('submit', submitRules);
+    }
+    if (metricsAdd) {
+      metricsAdd.addEventListener('click', () => {
+        if (!metricsInput || !metricsList) return;
+        const val = metricsInput.value.trim();
+        if (!val) return;
+        const row = document.createElement('div');
+        row.className = 'metrics-row';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = val;
+        input.addEventListener('change', () => persistMetrics());
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'ghost';
+        remove.textContent = 'Remove';
+        remove.addEventListener('click', () => {
+          row.remove();
+          persistMetrics();
+        });
+        row.appendChild(input);
+        row.appendChild(remove);
+        metricsList.appendChild(row);
+        metricsInput.value = '';
+        persistMetrics();
+      });
     }
     if (rulesAdd) {
       rulesAdd.addEventListener('click', () => {

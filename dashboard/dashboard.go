@@ -49,6 +49,7 @@ type DashboardServer struct {
 	globalAlerts  []dashboardAlertEntry
 	rulesConfig   RulesConfig
 	rulesPath     string
+	metricsPath   string
 	detector      *miniedr.Detector
 }
 
@@ -114,15 +115,15 @@ type dashboardData struct {
 
 // RuleDefinition defines a single metric threshold rule.
 type RuleDefinition struct {
-	ID       string                 `json:"id"`
-	Title    string                 `json:"title"`
-	Severity miniedr.AlertSeverity  `json:"severity"`
-	Metric   string                 `json:"metric"`
-	Op       string                 `json:"op"`
-	Value    float64                `json:"value"`
-	Message  string                 `json:"message"`
-	Source   string                 `json:"source,omitempty"`
-	Enabled  bool                   `json:"enabled"`
+	ID       string                `json:"id"`
+	Title    string                `json:"title"`
+	Severity miniedr.AlertSeverity `json:"severity"`
+	Metric   string                `json:"metric"`
+	Op       string                `json:"op"`
+	Value    float64               `json:"value"`
+	Message  string                `json:"message"`
+	Source   string                `json:"source,omitempty"`
+	Enabled  bool                  `json:"enabled"`
 }
 
 // RulesConfig holds editable rules persisted to disk.
@@ -157,6 +158,7 @@ func NewDashboardServer(capturers capturer.Capturers, title string, verbose bool
 		alertHistory:    make(map[string][]dashboardAlertEntry),
 		globalAlerts:    []dashboardAlertEntry{},
 		rulesPath:       "rules.json",
+		metricsPath:     "metrics.json",
 	}
 	d.rulesConfig = d.loadRulesConfig()
 	d.rebuildDetector()
@@ -221,6 +223,7 @@ func (d *DashboardServer) Run(ctx context.Context, addr string) error {
 	mux.Handle("/", d)
 	mux.HandleFunc("/events", d.serveEvents)
 	mux.HandleFunc("/rules", d.handleRules)
+	mux.HandleFunc("/metrics", d.handleMetrics)
 
 	srv := &http.Server{
 		Addr:    addr,
@@ -283,6 +286,28 @@ func (d *DashboardServer) handleRules(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(out)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (d *DashboardServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		metrics := d.loadMetricsList()
+		_ = json.NewEncoder(w).Encode(metrics)
+	case http.MethodPost:
+		var req []string
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("invalid json: %v", err), http.StatusBadRequest)
+			return
+		}
+		metrics := normalizeMetricsList(req)
+		if err := d.saveMetricsList(metrics); err != nil {
+			http.Error(w, fmt.Sprintf("save metrics: %v", err), http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(metrics)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -917,6 +942,50 @@ func (d *DashboardServer) saveRulesConfig(cfg RulesConfig) error {
 		return err
 	}
 	return os.WriteFile(d.rulesPath, append(data, '\n'), 0o644)
+}
+
+func (d *DashboardServer) loadMetricsList() []string {
+	if d.metricsPath == "" {
+		return []string{}
+	}
+	data, err := os.ReadFile(d.metricsPath)
+	if err != nil {
+		return []string{}
+	}
+	var out []string
+	if err := json.Unmarshal(data, &out); err != nil {
+		return []string{}
+	}
+	return normalizeMetricsList(out)
+}
+
+func (d *DashboardServer) saveMetricsList(metrics []string) error {
+	if d.metricsPath == "" {
+		return nil
+	}
+	data, err := json.MarshalIndent(metrics, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(d.metricsPath, append(data, '\n'), 0o644)
+}
+
+func normalizeMetricsList(list []string) []string {
+	metrics := make([]string, 0, len(list))
+	seen := make(map[string]struct{})
+	for _, m := range list {
+		m = strings.TrimSpace(m)
+		if m == "" {
+			continue
+		}
+		if _, ok := seen[m]; ok {
+			continue
+		}
+		seen[m] = struct{}{}
+		metrics = append(metrics, m)
+	}
+	sort.Strings(metrics)
+	return metrics
 }
 
 func buildMetricRule(def RuleDefinition) miniedr.RuleSpec {

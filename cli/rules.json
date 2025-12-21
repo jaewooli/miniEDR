@@ -69,26 +69,6 @@
       "value": 1,
       "message": "Persistence entries changed (total {value})",
       "enabled": true
-    },
-    {
-      "id": "custom.rule.8",
-      "title": "Low CPU usage",
-      "severity": "info",
-      "metric": "cpu.total_pct",
-      "op": "\u003c=",
-      "value": 0.4,
-      "message": "",
-      "enabled": true
-    },
-    {
-      "id": "custom.rule.9",
-      "title": "CPUT 2",
-      "severity": "info",
-      "metric": "cpu.core4_pct",
-      "op": "\u003e=",
-      "value": 0,
-      "message": "CPU 2",
-      "enabled": true
     }
   ]
 }
