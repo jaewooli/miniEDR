@@ -199,6 +199,7 @@ func TestMetricsHandlerRoundTrip(t *testing.T) {
 	if err := os.WriteFile(ds.metricsPath, append(data, '\n'), 0o644); err != nil {
 		t.Fatalf("write metrics.json: %v", err)
 	}
+	ds.customMetrics = ds.loadCustomMetricsConfig()
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	w := httptest.NewRecorder()
@@ -210,15 +211,19 @@ func TestMetricsHandlerRoundTrip(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 		t.Fatalf("decode GET /metrics: %v", err)
 	}
-	wantCustom := []string{"cpu.total_pct", "net.rx_bytes_per_sec"}
-	if !reflect.DeepEqual(got.Custom, wantCustom) {
-		t.Fatalf("GET /metrics custom = %+v, want %+v", got.Custom, wantCustom)
+	if len(got.Custom) != 0 {
+		t.Fatalf("GET /metrics custom = %+v, want empty", got.Custom)
 	}
 	if len(got.All) != len(got.Custom) {
 		t.Fatalf("GET /metrics all = %+v, want %+v", got.All, got.Custom)
 	}
 
-	update := []string{"mem.ram.used_pct", "cpu.total_pct"}
+	update := metricsPayload{
+		Custom: []CustomMetricPayload{{
+			Name: "cpu.combo",
+			Expr: "(cpu.total_pct + 1) / 2",
+		}},
+	}
 	body, _ := json.Marshal(update)
 	req = httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
 	w = httptest.NewRecorder()
@@ -230,9 +235,8 @@ func TestMetricsHandlerRoundTrip(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&gotAfter); err != nil {
 		t.Fatalf("decode POST /metrics: %v", err)
 	}
-	wantAfter := []string{"cpu.total_pct", "mem.ram.used_pct"}
-	if !reflect.DeepEqual(gotAfter.Custom, wantAfter) {
-		t.Fatalf("POST /metrics custom = %+v, want %+v", gotAfter.Custom, wantAfter)
+	if len(gotAfter.Custom) != 1 || gotAfter.Custom[0].Name != "cpu.combo" {
+		t.Fatalf("POST /metrics custom = %+v, want cpu.combo", gotAfter.Custom)
 	}
 
 	disk, err := os.ReadFile(ds.metricsPath)
@@ -243,8 +247,12 @@ func TestMetricsHandlerRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(disk, &onDisk); err != nil {
 		t.Fatalf("decode metrics.json: %v", err)
 	}
-	if !reflect.DeepEqual(onDisk, wantAfter) {
-		t.Fatalf("metrics.json = %+v, want %+v", onDisk, wantAfter)
+	var cfg metricsConfig
+	if err := json.Unmarshal(disk, &cfg); err != nil {
+		t.Fatalf("decode metrics.json: %v", err)
+	}
+	if len(cfg.Custom) != 1 || cfg.Custom[0].Name != "cpu.combo" {
+		t.Fatalf("metrics.json custom = %+v, want cpu.combo", cfg.Custom)
 	}
 }
 

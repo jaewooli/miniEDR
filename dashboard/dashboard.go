@@ -52,6 +52,7 @@ type DashboardServer struct {
 	rulesPath     string
 	metricsPath   string
 	defaultMetrics []string
+	customMetrics []CustomMetric
 	detector      *miniedr.Detector
 }
 
@@ -163,6 +164,7 @@ func NewDashboardServer(capturers capturer.Capturers, title string, verbose bool
 		metricsPath:     "metrics.json",
 	}
 	d.rulesConfig = d.loadRulesConfig()
+	d.customMetrics = d.loadCustomMetricsConfig()
 	d.rebuildDetector()
 	return d
 }
@@ -308,32 +310,37 @@ func (d *DashboardServer) handleMetrics(w http.ResponseWriter, r *http.Request) 
 	case http.MethodGet:
 		d.mu.RLock()
 		defaults := append([]string{}, d.defaultMetrics...)
+		customs := append([]CustomMetric{}, d.customMetrics...)
 		d.mu.RUnlock()
-		custom := d.loadCustomMetricsList()
 		payload := metricsPayload{
 			Default: defaults,
-			Custom:  custom,
-			All:     mergeMetrics(defaults, custom),
+			Custom:  toCustomMetricPayload(customs),
+			All:     mergeMetrics(defaults, customMetricNames(customs)),
 		}
 		_ = json.NewEncoder(w).Encode(payload)
 	case http.MethodPost:
-		var req []string
+		var req metricsPayload
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, fmt.Sprintf("invalid json: %v", err), http.StatusBadRequest)
 			return
 		}
-		metrics := normalizeMetricsList(req)
-		if err := d.saveMetricsList(metrics); err != nil {
+		custom, err := normalizeCustomMetrics(req.Custom)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("invalid metrics: %v", err), http.StatusBadRequest)
+			return
+		}
+		if err := d.saveCustomMetricsConfig(custom); err != nil {
 			http.Error(w, fmt.Sprintf("save metrics: %v", err), http.StatusInternalServerError)
 			return
 		}
-		d.mu.RLock()
+		d.mu.Lock()
+		d.customMetrics = custom
 		defaults := append([]string{}, d.defaultMetrics...)
-		d.mu.RUnlock()
+		d.mu.Unlock()
 		payload := metricsPayload{
 			Default: defaults,
-			Custom:  metrics,
-			All:     mergeMetrics(defaults, metrics),
+			Custom:  toCustomMetricPayload(custom),
+			All:     mergeMetrics(defaults, customMetricNames(custom)),
 		}
 		_ = json.NewEncoder(w).Encode(payload)
 	default:
@@ -342,9 +349,26 @@ func (d *DashboardServer) handleMetrics(w http.ResponseWriter, r *http.Request) 
 }
 
 type metricsPayload struct {
-	Default []string `json:"default"`
-	Custom  []string `json:"custom"`
-	All     []string `json:"all"`
+	Default []string              `json:"default"`
+	Custom  []CustomMetricPayload `json:"custom"`
+	All     []string              `json:"all"`
+}
+
+type CustomMetricPayload struct {
+	Name string `json:"name"`
+	Expr string `json:"expr"`
+}
+
+type CustomMetric struct {
+	Name string     `json:"name"`
+	Expr MetricExpr `json:"expr"`
+}
+
+type MetricExpr struct {
+	Op     string       `json:"op,omitempty"`
+	Args   []MetricExpr `json:"args,omitempty"`
+	Metric string       `json:"metric,omitempty"`
+	Value  *float64     `json:"value,omitempty"`
 }
 
 func (d *DashboardServer) captureAndStore() {
@@ -393,6 +417,10 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 			if info.Meta.Timezone == "" {
 				info.Meta.Timezone = time.Now().Format("-0700")
 			}
+			d.mu.RLock()
+			customs := append([]CustomMetric{}, d.customMetrics...)
+			d.mu.RUnlock()
+			applyCustomMetrics(&info, customs)
 			item.Info = info
 			item.Meta = info.Meta
 			if vc, ok := c.(capturer.VerboseInfo); ok {
@@ -987,50 +1015,39 @@ func (d *DashboardServer) saveRulesConfig(cfg RulesConfig) error {
 	return os.WriteFile(d.rulesPath, append(data, '\n'), 0o644)
 }
 
-func (d *DashboardServer) loadCustomMetricsList() []string {
+func (d *DashboardServer) loadCustomMetricsConfig() []CustomMetric {
 	if d.metricsPath == "" {
-		return []string{}
+		return []CustomMetric{}
 	}
 	data, err := os.ReadFile(d.metricsPath)
 	if err != nil {
-		return []string{}
+		return []CustomMetric{}
 	}
-	var out []string
-	if err := json.Unmarshal(data, &out); err != nil {
-		return []string{}
+	var cfg metricsConfig
+	if err := json.Unmarshal(data, &cfg); err == nil && len(cfg.Custom) > 0 {
+		return normalizeCustomMetricsUnsafe(cfg.Custom)
 	}
-	return normalizeMetricsList(out)
+	var legacy []string
+	if err := json.Unmarshal(data, &legacy); err == nil {
+		return []CustomMetric{}
+	}
+	return []CustomMetric{}
 }
 
-func (d *DashboardServer) saveMetricsList(metrics []string) error {
+func (d *DashboardServer) saveCustomMetricsConfig(metrics []CustomMetric) error {
 	if d.metricsPath == "" {
 		return nil
 	}
-	data, err := json.MarshalIndent(metrics, "", "  ")
+	cfg := metricsConfig{Custom: metrics}
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(d.metricsPath, append(data, '\n'), 0o644)
 }
 
-func normalizeMetricsList(list []string) []string {
-	metrics := make([]string, 0, len(list))
-	seen := make(map[string]struct{})
-	for _, m := range list {
-		m = strings.TrimSpace(m)
-		if m == "" {
-			continue
-		}
-		if _, ok := seen[m]; ok {
-			continue
-		}
-		seen[m] = struct{}{}
-		metrics = append(metrics, m)
-	}
-	sort.Slice(metrics, func(i, j int) bool {
-		return metricLess(metrics[i], metrics[j])
-	})
-	return metrics
+type metricsConfig struct {
+	Custom []CustomMetric `json:"custom"`
 }
 
 func mergeMetrics(a, b []string) []string {
@@ -1113,6 +1130,82 @@ func deriveDefaultMetrics(items []dashboardItem) []string {
 	return keys
 }
 
+func customMetricNames(list []CustomMetric) []string {
+	names := make([]string, 0, len(list))
+	for _, cm := range list {
+		if cm.Name == "" {
+			continue
+		}
+		names = append(names, cm.Name)
+	}
+	return names
+}
+
+func toCustomMetricPayload(list []CustomMetric) []CustomMetricPayload {
+	out := make([]CustomMetricPayload, 0, len(list))
+	for _, cm := range list {
+		if cm.Name == "" {
+			continue
+		}
+		out = append(out, CustomMetricPayload{
+			Name: cm.Name,
+			Expr: formatMetricExpr(cm.Expr),
+		})
+	}
+	return out
+}
+
+func normalizeCustomMetrics(input []CustomMetricPayload) ([]CustomMetric, error) {
+	out := make([]CustomMetric, 0, len(input))
+	seen := make(map[string]struct{})
+	for _, raw := range input {
+		name := strings.TrimSpace(raw.Name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		exprText := strings.TrimSpace(raw.Expr)
+		if exprText == "" {
+			return nil, fmt.Errorf("metric %q missing expr", name)
+		}
+		expr, err := parseMetricExpr(exprText)
+		if err != nil {
+			return nil, fmt.Errorf("metric %q: %w", name, err)
+		}
+		out = append(out, CustomMetric{Name: name, Expr: expr})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return metricLess(out[i].Name, out[j].Name)
+	})
+	return out, nil
+}
+
+func normalizeCustomMetricsUnsafe(input []CustomMetric) []CustomMetric {
+	out := make([]CustomMetric, 0, len(input))
+	seen := make(map[string]struct{})
+	for _, raw := range input {
+		name := strings.TrimSpace(raw.Name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		if raw.Expr.Op == "" && raw.Expr.Metric == "" && raw.Expr.Value == nil {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, CustomMetric{Name: name, Expr: raw.Expr})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return metricLess(out[i].Name, out[j].Name)
+	})
+	return out
+}
+
 func metricLess(a, b string) bool {
 	ap, ai, aok := parseCoreMetric(a)
 	bp, bi, bok := parseCoreMetric(b)
@@ -1135,6 +1228,228 @@ func parseCoreMetric(s string) (string, int, bool) {
 		return "", 0, false
 	}
 	return "cpu.core", n, true
+}
+
+type metricTokenType int
+
+const (
+	tokenEOF metricTokenType = iota
+	tokenNumber
+	tokenIdent
+	tokenPlus
+	tokenMinus
+	tokenMul
+	tokenDiv
+	tokenLParen
+	tokenRParen
+)
+
+type metricToken struct {
+	typ metricTokenType
+	val string
+}
+
+type metricLexer struct {
+	input string
+	pos   int
+}
+
+func newMetricLexer(input string) *metricLexer {
+	return &metricLexer{input: input}
+}
+
+func (l *metricLexer) nextToken() metricToken {
+	for l.pos < len(l.input) && l.input[l.pos] == ' ' {
+		l.pos++
+	}
+	if l.pos >= len(l.input) {
+		return metricToken{typ: tokenEOF}
+	}
+	ch := l.input[l.pos]
+	switch ch {
+	case '+':
+		l.pos++
+		return metricToken{typ: tokenPlus, val: "+"}
+	case '-':
+		l.pos++
+		return metricToken{typ: tokenMinus, val: "-"}
+	case '*':
+		l.pos++
+		return metricToken{typ: tokenMul, val: "*"}
+	case '/':
+		l.pos++
+		return metricToken{typ: tokenDiv, val: "/"}
+	case '(':
+		l.pos++
+		return metricToken{typ: tokenLParen, val: "("}
+	case ')':
+		l.pos++
+		return metricToken{typ: tokenRParen, val: ")"}
+	}
+	if isDigit(ch) || ch == '.' {
+		start := l.pos
+		l.pos++
+		for l.pos < len(l.input) && (isDigit(l.input[l.pos]) || l.input[l.pos] == '.') {
+			l.pos++
+		}
+		return metricToken{typ: tokenNumber, val: l.input[start:l.pos]}
+	}
+	if isIdentStart(ch) {
+		start := l.pos
+		l.pos++
+		for l.pos < len(l.input) && isIdentPart(l.input[l.pos]) {
+			l.pos++
+		}
+		return metricToken{typ: tokenIdent, val: l.input[start:l.pos]}
+	}
+	l.pos++
+	return metricToken{typ: tokenEOF}
+}
+
+func isDigit(b byte) bool {
+	return b >= '0' && b <= '9'
+}
+
+func isIdentStart(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_' || b == '.'
+}
+
+func isIdentPart(b byte) bool {
+	return isIdentStart(b) || isDigit(b)
+}
+
+type metricParser struct {
+	lexer *metricLexer
+	cur   metricToken
+}
+
+func newMetricParser(input string) *metricParser {
+	lex := newMetricLexer(input)
+	return &metricParser{lexer: lex, cur: lex.nextToken()}
+}
+
+func (p *metricParser) next() {
+	p.cur = p.lexer.nextToken()
+}
+
+func parseMetricExpr(input string) (MetricExpr, error) {
+	p := newMetricParser(input)
+	expr, err := p.parseExpr()
+	if err != nil {
+		return MetricExpr{}, err
+	}
+	if p.cur.typ != tokenEOF {
+		return MetricExpr{}, fmt.Errorf("unexpected token %q", p.cur.val)
+	}
+	return expr, nil
+}
+
+func (p *metricParser) parseExpr() (MetricExpr, error) {
+	left, err := p.parseTerm()
+	if err != nil {
+		return MetricExpr{}, err
+	}
+	for p.cur.typ == tokenPlus || p.cur.typ == tokenMinus {
+		op := p.cur.val
+		p.next()
+		right, err := p.parseTerm()
+		if err != nil {
+			return MetricExpr{}, err
+		}
+		left = MetricExpr{Op: op, Args: []MetricExpr{left, right}}
+	}
+	return left, nil
+}
+
+func (p *metricParser) parseTerm() (MetricExpr, error) {
+	left, err := p.parseFactor()
+	if err != nil {
+		return MetricExpr{}, err
+	}
+	for p.cur.typ == tokenMul || p.cur.typ == tokenDiv {
+		op := p.cur.val
+		p.next()
+		right, err := p.parseFactor()
+		if err != nil {
+			return MetricExpr{}, err
+		}
+		left = MetricExpr{Op: op, Args: []MetricExpr{left, right}}
+	}
+	return left, nil
+}
+
+func (p *metricParser) parseFactor() (MetricExpr, error) {
+	switch p.cur.typ {
+	case tokenNumber:
+		val, err := strconv.ParseFloat(p.cur.val, 64)
+		if err != nil {
+			return MetricExpr{}, fmt.Errorf("invalid number %q", p.cur.val)
+		}
+		p.next()
+		return MetricExpr{Value: &val}, nil
+	case tokenIdent:
+		ident := p.cur.val
+		p.next()
+		return MetricExpr{Metric: ident}, nil
+	case tokenMinus:
+		p.next()
+		factor, err := p.parseFactor()
+		if err != nil {
+			return MetricExpr{}, err
+		}
+		zero := 0.0
+		return MetricExpr{Op: "-", Args: []MetricExpr{{Value: &zero}, factor}}, nil
+	case tokenLParen:
+		p.next()
+		expr, err := p.parseExpr()
+		if err != nil {
+			return MetricExpr{}, err
+		}
+		if p.cur.typ != tokenRParen {
+			return MetricExpr{}, fmt.Errorf("expected )")
+		}
+		p.next()
+		return expr, nil
+	default:
+		return MetricExpr{}, fmt.Errorf("unexpected token %q", p.cur.val)
+	}
+}
+
+func formatMetricExpr(expr MetricExpr) string {
+	return formatMetricExprWithPrec(expr, 0)
+}
+
+func formatMetricExprWithPrec(expr MetricExpr, parentPrec int) string {
+	if expr.Metric != "" {
+		return expr.Metric
+	}
+	if expr.Value != nil {
+		return formatFloat(*expr.Value)
+	}
+	if expr.Op == "" || len(expr.Args) == 0 {
+		return ""
+	}
+	prec := opPrecedence(expr.Op)
+	parts := make([]string, 0, len(expr.Args))
+	for _, arg := range expr.Args {
+		parts = append(parts, formatMetricExprWithPrec(arg, prec))
+	}
+	out := strings.Join(parts, " "+expr.Op+" ")
+	if prec < parentPrec {
+		return "(" + out + ")"
+	}
+	return out
+}
+
+func opPrecedence(op string) int {
+	switch op {
+	case "*", "/":
+		return 2
+	case "+", "-":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func hasAny(seen map[string]struct{}, keys ...string) bool {
@@ -1256,6 +1571,94 @@ func normalizeSeverity(s miniedr.AlertSeverity) miniedr.AlertSeverity {
 		return miniedr.AlertSeverity(strings.ToLower(string(s)))
 	default:
 		return miniedr.SeverityInfo
+	}
+}
+
+func applyCustomMetrics(info *capturer.InfoData, customs []CustomMetric) {
+	if info == nil || len(customs) == 0 {
+		return
+	}
+	if info.Metrics == nil {
+		info.Metrics = make(map[string]float64)
+	}
+	for _, cm := range customs {
+		if cm.Name == "" {
+			continue
+		}
+		if _, exists := info.Metrics[cm.Name]; exists {
+			continue
+		}
+		val, ok := evalMetricExpr(cm.Expr, info.Metrics)
+		if !ok {
+			continue
+		}
+		info.Metrics[cm.Name] = val
+	}
+}
+
+func evalMetricExpr(expr MetricExpr, metrics map[string]float64) (float64, bool) {
+	if expr.Metric != "" {
+		val, ok := metrics[expr.Metric]
+		return val, ok
+	}
+	if expr.Value != nil {
+		return *expr.Value, true
+	}
+	if expr.Op == "" || len(expr.Args) == 0 {
+		return 0, false
+	}
+	switch expr.Op {
+	case "+":
+		total := 0.0
+		for _, arg := range expr.Args {
+			val, ok := evalMetricExpr(arg, metrics)
+			if !ok {
+				return 0, false
+			}
+			total += val
+		}
+		return total, true
+	case "-":
+		val, ok := evalMetricExpr(expr.Args[0], metrics)
+		if !ok {
+			return 0, false
+		}
+		if len(expr.Args) == 1 {
+			return -val, true
+		}
+		for i := 1; i < len(expr.Args); i++ {
+			next, ok := evalMetricExpr(expr.Args[i], metrics)
+			if !ok {
+				return 0, false
+			}
+			val -= next
+		}
+		return val, true
+	case "*":
+		total := 1.0
+		for _, arg := range expr.Args {
+			val, ok := evalMetricExpr(arg, metrics)
+			if !ok {
+				return 0, false
+			}
+			total *= val
+		}
+		return total, true
+	case "/":
+		val, ok := evalMetricExpr(expr.Args[0], metrics)
+		if !ok {
+			return 0, false
+		}
+		for i := 1; i < len(expr.Args); i++ {
+			next, ok := evalMetricExpr(expr.Args[i], metrics)
+			if !ok || next == 0 {
+				return 0, false
+			}
+			val /= next
+		}
+		return val, true
+	default:
+		return 0, false
 	}
 }
 

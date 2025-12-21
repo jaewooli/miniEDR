@@ -377,7 +377,7 @@ small {
   flex-wrap: wrap;
 }
 .metrics-controls input {
-  min-width: 220px;
+  min-width: 200px;
   background: #0b1220;
   color: #e5e7eb;
   border: 1px solid rgba(148, 163, 184, 0.3);
@@ -757,7 +757,8 @@ small {
       <form id="rulesForm" class="rules-form">
         <div class="rules-toolbar">
           <div class="metrics-controls">
-            <input type="text" id="metricsInput" placeholder="new.metric.name" />
+            <input type="text" id="metricsInput" placeholder="custom.metric.name" />
+            <input type="text" id="metricsExprInput" placeholder="(cpu.total_pct + mem.ram.used_pct) / 2" />
             <button type="button" class="ghost" id="metricsAdd">Add metric</button>
           </div>
           <button type="button" class="ghost" id="rulesAdd">Add rule</button>
@@ -793,7 +794,7 @@ small {
           </div>
         </div>
         <datalist id="rule-metrics"></datalist>
-        <div class="hint">Metric suggestions come from metrics.json. Message placeholders: {metric}, {value}, {threshold}</div>
+        <div class="hint">Custom metrics support + - * / and parentheses. Message placeholders: {metric}, {value}, {threshold}</div>
         <div class="hint" id="rulesStatus"></div>
         <div style="display:flex;gap:8px;">
           <button type="submit" class="primary-button">Save</button>
@@ -872,6 +873,7 @@ small {
     const rulesAdd = document.getElementById('rulesAdd');
     const ruleMetrics = document.getElementById('rule-metrics');
     const metricsInput = document.getElementById('metricsInput');
+    const metricsExprInput = document.getElementById('metricsExprInput');
     const metricsAdd = document.getElementById('metricsAdd');
     const metricsList = document.getElementById('metricsList');
     const metricsDefaultList = document.getElementById('metricsDefaultList');
@@ -1117,14 +1119,16 @@ small {
 
     function collectMetricsFromList() {
       if (!metricsList) return [];
-      const inputs = metricsList.querySelectorAll('input');
+      const rows = metricsList.querySelectorAll('.metrics-row');
       const seen = new Set();
       const out = [];
-      inputs.forEach((input) => {
-        const val = input.value.trim();
-        if (!val || seen.has(val)) return;
-        seen.add(val);
-        out.push(val);
+      rows.forEach((row) => {
+        const inputs = row.querySelectorAll('input');
+        const name = (inputs[0] && inputs[0].value || '').trim();
+        const expr = (inputs[1] && inputs[1].value || '').trim();
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+        out.push({name: name, expr: expr});
       });
       return out;
     }
@@ -1156,8 +1160,13 @@ small {
         row.className = 'metrics-row';
         const input = document.createElement('input');
         input.type = 'text';
-        input.value = metric;
+        input.value = metric.name || '';
         input.addEventListener('change', () => persistMetrics());
+        const expr = document.createElement('input');
+        expr.type = 'text';
+        expr.placeholder = '(cpu.total_pct + mem.ram.used_pct) / 2';
+        expr.value = metric.expr || '';
+        expr.addEventListener('change', () => persistMetrics());
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'ghost';
@@ -1167,6 +1176,7 @@ small {
           persistMetrics();
         });
         row.appendChild(input);
+        row.appendChild(expr);
         row.appendChild(remove);
         metricsList.appendChild(row);
       });
@@ -1182,7 +1192,7 @@ small {
         const res = await fetch('/metrics', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload),
+          body: JSON.stringify({custom: payload}),
         });
         const text = await res.text();
         if (!res.ok) throw new Error(text || 'failed to save metrics');
@@ -1337,15 +1347,21 @@ small {
     }
     if (metricsAdd) {
       metricsAdd.addEventListener('click', () => {
-        if (!metricsInput || !metricsList) return;
+        if (!metricsInput || !metricsExprInput || !metricsList) return;
         const val = metricsInput.value.trim();
-        if (!val) return;
+        const exprVal = metricsExprInput.value.trim();
+        if (!val || !exprVal) return;
         const row = document.createElement('div');
         row.className = 'metrics-row';
         const input = document.createElement('input');
         input.type = 'text';
         input.value = val;
         input.addEventListener('change', () => persistMetrics());
+        const expr = document.createElement('input');
+        expr.type = 'text';
+        expr.placeholder = '(cpu.total_pct + mem.ram.used_pct) / 2';
+        expr.value = exprVal;
+        expr.addEventListener('change', () => persistMetrics());
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'ghost';
@@ -1355,9 +1371,11 @@ small {
           persistMetrics();
         });
         row.appendChild(input);
+        row.appendChild(expr);
         row.appendChild(remove);
         metricsList.appendChild(row);
         metricsInput.value = '';
+        metricsExprInput.value = '';
         persistMetrics();
       });
     }
