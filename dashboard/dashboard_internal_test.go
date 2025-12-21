@@ -1,8 +1,13 @@
 package dashboard
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jaewooli/miniedr/capturer"
 )
@@ -96,5 +101,107 @@ func TestChartXLargeTotalSpreadsToEdges(t *testing.T) {
 	mid := chartX(total/2, total)
 	if mid <= 0 || mid >= 220 {
 		t.Fatalf("chartX mid should be between edges, got %d", mid)
+	}
+}
+
+type alertStub struct {
+	infos []capturer.InfoData
+	idx   int
+}
+
+func (a *alertStub) Capture() error {
+	if a.idx < 0 {
+		a.idx = 0
+		return nil
+	}
+	if a.idx < len(a.infos)-1 {
+		a.idx++
+	}
+	return nil
+}
+
+func (a *alertStub) GetInfo() (capturer.InfoData, error) {
+	if a.idx < 0 || len(a.infos) == 0 {
+		return capturer.InfoData{}, nil
+	}
+	return a.infos[a.idx], nil
+}
+
+func TestRulesHandlerRoundTrip(t *testing.T) {
+	ds := NewDashboardServer(capturer.Capturers{}, "TestDash", false)
+
+	req := httptest.NewRequest(http.MethodGet, "/rules", nil)
+	w := httptest.NewRecorder()
+	ds.handleRules(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /rules status = %d", w.Code)
+	}
+	var got RuleConfig
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode GET /rules: %v", err)
+	}
+	want := defaultRuleConfig()
+	if got != want {
+		t.Fatalf("GET /rules = %+v, want %+v", got, want)
+	}
+
+	update := RuleConfig{
+		CPUHighPct:       12,
+		MemRamPct:        34,
+		MemSwapPct:       56,
+		ProcBurst:        3,
+		NetSpikeBytes:    2048,
+		FileEventsBurst:  7,
+		PersistMinChange: 2,
+	}
+	body, _ := json.Marshal(update)
+	req = httptest.NewRequest(http.MethodPost, "/rules", bytes.NewReader(body))
+	w = httptest.NewRecorder()
+	ds.handleRules(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST /rules status = %d", w.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/rules", nil)
+	w = httptest.NewRecorder()
+	ds.handleRules(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /rules after update status = %d", w.Code)
+	}
+	var gotAfter RuleConfig
+	if err := json.NewDecoder(w.Body).Decode(&gotAfter); err != nil {
+		t.Fatalf("decode GET /rules after update: %v", err)
+	}
+	if gotAfter != update {
+		t.Fatalf("GET /rules after update = %+v, want %+v", gotAfter, update)
+	}
+}
+
+func TestAlertHistoryTracksSnapshots(t *testing.T) {
+	info1 := capturer.InfoData{
+		Summary: "cpu alert 1",
+		Metrics: map[string]float64{"cpu.total_pct": 95},
+		Meta:    capturer.TelemetryMeta{CapturedAt: time.Unix(100, 0)},
+	}
+	info2 := capturer.InfoData{
+		Summary: "cpu alert 2",
+		Metrics: map[string]float64{"cpu.total_pct": 96},
+		Meta:    capturer.TelemetryMeta{CapturedAt: time.Unix(101, 0)},
+	}
+	ds := NewDashboardServer(capturer.Capturers{&alertStub{infos: []capturer.InfoData{info1, info2}, idx: -1}}, "TestDash", false)
+
+	ds.CaptureNow()
+	ds.CaptureNow()
+
+	snap := ds.currentSnapshot()
+	if len(snap.GlobalAlerts) != 2 {
+		t.Fatalf("GlobalAlerts len = %d, want 2", len(snap.GlobalAlerts))
+	}
+	last := snap.GlobalAlerts[len(snap.GlobalAlerts)-1]
+	if last.Title != "High CPU usage" {
+		t.Fatalf("last alert title = %q, want %q", last.Title, "High CPU usage")
+	}
+	if last.RuleID != "cpu.high_usage" {
+		t.Fatalf("last alert rule = %q, want %q", last.RuleID, "cpu.high_usage")
 	}
 }

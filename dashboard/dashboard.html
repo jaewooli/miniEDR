@@ -23,6 +23,7 @@ body {
   align-items: baseline;
   gap: 16px;
   flex-wrap: wrap;
+  margin-bottom: 18px;
 }
 .title {
   font-size: 28px;
@@ -32,6 +33,7 @@ body {
 .meta {
   color: #94a3b8;
   font-size: 14px;
+  margin-top: 6px;
 }
 .actions {
   margin-left: auto;
@@ -296,7 +298,6 @@ small {
   color: #e2e8f0;
 }
 .panel .hint {
-  margin-bottom: 10px;
   display: block;
 }
 .alert-controls {
@@ -314,7 +315,7 @@ small {
 }
 .alert-controls select,
 .alert-controls input {
-  width: 100%;
+  width: 97%;
   padding: 8px;
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.3);
@@ -324,6 +325,17 @@ small {
 }
 .alert-controls .grow {
   flex: 1 1 240px;
+}
+.alert-controls .alert-action {
+  display: flex;
+  flex-direction: column;
+}
+.alert-controls label.spacer {
+  visibility: hidden;
+}
+.alert-controls .clear-button {
+  align-self: flex-end;
+  height: 36px;
 }
 .detail-box {
   max-height: 260px;
@@ -404,6 +416,7 @@ small {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-bottom:2px;
   flex-wrap: wrap;
 }
 .severity-info { background: #38bdf8; color: #0b1220; }
@@ -478,21 +491,26 @@ small {
           <label for="alertFilterText">Search</label>
           <input id="alertFilterText" type="text" placeholder="Title, message, rule id, source" />
         </div>
-        <button class="ghost" id="alertFilterClear">Clear</button>
+        <div class="alert-action">
+          <label class="spacer" aria-hidden="true">Action</label>
+          <button class="ghost clear-button" id="alertFilterClear">Clear</button>
+        </div>
       </div>
-      {{if .GlobalAlerts}}
-        <ul class="alert-list" id="alertHistoryList">
-          {{range .GlobalAlerts}}
-            <li data-severity="{{.Severity}}" data-rule="{{.RuleID}}" data-source="{{.Source}}" data-text="{{.Title}} {{.Message}} {{.RuleID}} {{.Source}}">
-              <span class="pill severity-{{.Severity}}">{{.Severity}}</span>
-              <strong>{{.Title}}</strong> — {{.Message}}
-              <span class="hint">{{.At}}</span>
-            </li>
-          {{end}}
-        </ul>
-      {{else}}
-        <div class="hint">No alerts recorded yet.</div>
-      {{end}}
+      <div id="alertHistoryBody">
+        {{if .GlobalAlerts}}
+          <ul class="alert-list" id="alertHistoryList">
+            {{range .GlobalAlerts}}
+              <li data-severity="{{.Severity}}" data-rule="{{.RuleID}}" data-source="{{.Source}}" data-text="{{.Title}} {{.Message}} {{.RuleID}} {{.Source}}">
+                <span class="pill severity-{{.Severity}}">{{.Severity}}</span>
+                <strong>{{.Title}}</strong> — {{.Message}}
+                <span class="hint">{{.At}}</span>
+              </li>
+            {{end}}
+          </ul>
+        {{else}}
+          <div class="hint">No alerts recorded yet.</div>
+        {{end}}
+      </div>
     </div>
 
     <div class="grid">
@@ -671,6 +689,7 @@ small {
     const rulesForm = document.getElementById('rulesForm');
     const rulesStatus = document.getElementById('rulesStatus');
     let alertFilterState = {severity: '', text: ''};
+    let rulesBackdropPress = false;
     const storageKeyAuto = 'miniedr:auto';
     const storageKeyAutoInterval = 'miniedr:autoInterval';
     const storageKeyEvent = 'miniedr:event';
@@ -683,19 +702,21 @@ small {
       const textInput = document.getElementById('alertFilterText');
       const clearBtn = document.getElementById('alertFilterClear');
       const list = document.getElementById('alertHistoryList');
-      if (!severitySel || !textInput || !clearBtn || !list) return;
+      if (!severitySel || !textInput || !clearBtn) return;
 
       const applyFilter = () => {
         const sev = severitySel.value.trim().toLowerCase();
         const q = textInput.value.trim().toLowerCase();
-        const items = list.querySelectorAll('li');
-        items.forEach((li) => {
-          const liSev = (li.getAttribute('data-severity') || '').toLowerCase();
-          const liText = (li.getAttribute('data-text') || '').toLowerCase();
-          const sevOk = !sev || liSev === sev;
-          const textOk = !q || liText.includes(q);
-          li.style.display = sevOk && textOk ? '' : 'none';
-        });
+        if (list) {
+          const items = list.querySelectorAll('li');
+          items.forEach((li) => {
+            const liSev = (li.getAttribute('data-severity') || '').toLowerCase();
+            const liText = (li.getAttribute('data-text') || '').toLowerCase();
+            const sevOk = !sev || liSev === sev;
+            const textOk = !q || liText.includes(q);
+            li.style.display = sevOk && textOk ? '' : 'none';
+          });
+        }
         alertFilterState = {severity: severitySel.value, text: textInput.value};
       };
 
@@ -726,8 +747,8 @@ small {
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const newMeta = doc.querySelector('.meta');
         const newGrid = doc.querySelector('.grid');
-        const newAlertPanel = doc.getElementById('alertPanel');
-        const alertPanel = document.getElementById('alertPanel');
+        const newAlertBody = doc.getElementById('alertHistoryBody');
+        const alertBody = document.getElementById('alertHistoryBody');
         if (newMeta && metaEl) metaEl.innerHTML = newMeta.innerHTML;
         if (newGrid && gridEl) {
           gridEl.innerHTML = newGrid.innerHTML;
@@ -741,8 +762,8 @@ small {
             el.scrollTop = state.scroll;
           });
         }
-        if (newAlertPanel && alertPanel) {
-          alertPanel.innerHTML = newAlertPanel.innerHTML;
+        if (newAlertBody && alertBody) {
+          alertBody.innerHTML = newAlertBody.innerHTML;
           wireAlertFilters();
         }
       } catch (e) {
@@ -905,8 +926,15 @@ small {
       });
     }
     if (rulesModal) {
-      rulesModal.addEventListener('click', (e) => {
-        if (e.target === rulesModal) closeRules();
+      rulesModal.addEventListener('mousedown', (e) => {
+        rulesBackdropPress = e.target === rulesModal;
+      });
+      rulesModal.addEventListener('mouseup', (e) => {
+        if (rulesBackdropPress && e.target === rulesModal) closeRules();
+        rulesBackdropPress = false;
+      });
+      rulesModal.addEventListener('mouseleave', () => {
+        rulesBackdropPress = false;
       });
     }
 

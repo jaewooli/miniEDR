@@ -2,8 +2,8 @@ package dashboard
 
 import (
 	"context"
-	"encoding/json"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"math"
@@ -45,24 +45,24 @@ type DashboardServer struct {
 	itemIntervals map[string]time.Duration
 	netScales     map[string]float64
 	countScales   map[string]map[string]float64 // item -> label -> scale
-	alertHistory map[string][]dashboardAlertEntry
+	alertHistory  map[string][]dashboardAlertEntry
 	globalAlerts  []dashboardAlertEntry
 	ruleConfig    RuleConfig
 	detector      *miniedr.Detector
 }
 
 type dashboardItem struct {
-	Name    string
-	Info    capturer.InfoData
-	Verbose string
-	Error   string
-	Changed bool
-	Warming bool
-	Logs    []dashboardLogEntry
-	Graphs  []graphInfo
-	Display string
-	Meta    capturer.TelemetryMeta
-	Alerts  []miniedr.Alert
+	Name         string
+	Info         capturer.InfoData
+	Verbose      string
+	Error        string
+	Changed      bool
+	Warming      bool
+	Logs         []dashboardLogEntry
+	Graphs       []graphInfo
+	Display      string
+	Meta         capturer.TelemetryMeta
+	Alerts       []miniedr.Alert
 	AlertHistory []dashboardAlertEntry
 }
 
