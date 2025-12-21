@@ -6,15 +6,45 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>{{.Title}}</title>
 <style>
+:root {
+  --bg-top: #fbfdff;
+  --bg: #f6f9fc;
+  --bg-accent: #eef4ff;
+  --surface: #ffffff;
+  --surface-muted: #f4f7fb;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --primary: #2563eb;
+  --primary-strong: #1d4ed8;
+  --primary-soft: #e8efff;
+  --shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+  --shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+[data-theme="dark"] {
+  --bg-top: #0b0f1a;
+  --bg: #0b0f1a;
+  --bg-accent: #0f172a;
+  --surface: #111827;
+  --surface-muted: #0f172a;
+  --text: #e5e7eb;
+  --muted: #94a3b8;
+  --border: rgba(148, 163, 184, 0.18);
+  --primary: #38bdf8;
+  --primary-strong: #0ea5e9;
+  --primary-soft: rgba(56, 189, 248, 0.16);
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
 body {
   margin: 0;
-  font-family: "Fira Sans", "Segoe UI", "Trebuchet MS", system-ui, -apple-system, sans-serif;
-  background: radial-gradient(circle at 20% 20%, #0f172a, #0b1220 35%, #050915);
-  color: #e5e7eb;
+  font-family: "Pretendard", "SUIT", "IBM Plex Sans KR", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, -apple-system, sans-serif;
+  background: radial-gradient(circle at 10% 10%, var(--bg-top), var(--bg) 45%, var(--bg-accent) 100%);
+  color: var(--text);
   min-height: 100vh;
 }
 .shell {
-  max-width: 1200px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 32px 20px 80px;
 }
@@ -26,13 +56,13 @@ body {
   margin-bottom: 18px;
 }
 .title {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 700;
-  letter-spacing: 0.4px;
+  letter-spacing: -0.2px;
 }
 .meta {
-  color: #94a3b8;
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 13px;
   margin-top: 6px;
 }
 .actions {
@@ -45,16 +75,16 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #cbd5e1;
+  color: var(--muted);
   font-size: 13px;
 }
 .control input[type="number"] {
   width: 70px;
   padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  background: rgba(15, 23, 42, 0.6);
-  color: #e5e7eb;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
 }
 .toggle {
   display: inline-flex;
@@ -68,19 +98,20 @@ input[type="checkbox"] {
   height: 16px;
 }
 button {
-  background: linear-gradient(120deg, #22d3ee, #3b82f6);
-  color: #0b1220;
+  background: var(--primary);
+  color: #ffffff;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px 14px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 8px 30px rgba(34, 211, 238, 0.25);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  box-shadow: var(--shadow-soft);
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
 button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 34px rgba(59, 130, 246, 0.3);
+  background: var(--primary-strong);
+  box-shadow: var(--shadow);
 }
 .grid {
   margin-top: 24px;
@@ -90,12 +121,11 @@ button:hover {
   align-items: stretch;
 }
 .card {
-  background: linear-gradient(135deg, rgba(148, 163, 184, 0.08), rgba(100, 116, 139, 0.05));
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-  backdrop-filter: blur(4px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: var(--shadow-soft);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -106,28 +136,30 @@ button:hover {
 .card h2 {
   margin: 0;
   font-size: 18px;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.2px;
 }
 .changed {
-  background: linear-gradient(120deg, #22c55e, #10b981);
-  color: #0b1220;
+  background: #16a34a;
+  color: #ffffff;
 }
 .pill {
   display: inline-block;
+  align-items: center;
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 12px;
-  letter-spacing: 0.2px;
-  background: #0ea5e9;
-  color: #0b1220;
+  letter-spacing: 0.1px;
+  background: var(--primary-soft);
+  color: var(--primary);
   font-weight: 700;
+  line-height: 1;
 }
 .pill.warm {
-  background: #fbbf24;
-  color: #0b1220;
+  background: #fde68a;
+  color: #92400e;
 }
 .error {
-  color: #fca5a5;
+  color: #b42318;
   font-weight: 600;
 }
 .chart {
@@ -146,9 +178,9 @@ button:hover {
   inset: 0;
   border-radius: 50%;
   background: conic-gradient(
-    #22d3ee calc(var(--val) * 1%),
-    rgba(148,163,184,0.2) calc(var(--val) * 1%),
-    rgba(148,163,184,0.2) 100%
+    var(--primary) calc(var(--val) * 1%),
+    #e2e8f0 calc(var(--val) * 1%),
+    #e2e8f0 100%
   );
 }
 .gauge-center {
@@ -156,20 +188,20 @@ button:hover {
   width: 100px;
   height: 100px;
   border-radius: 50%;
-  background: #0b1220;
+  background: var(--surface);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  color: #e5e7eb;
-  box-shadow: inset 0 0 0 1px rgba(148,163,184,0.3);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
   font-weight: 700;
   text-align: center;
 }
 .gauge-label {
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--muted);
   font-weight: 600;
   max-width: 110px;
   line-height: 1.2;
@@ -177,7 +209,7 @@ button:hover {
 }
 .gauge-hint {
   font-size: 11px;
-  color: #64748b;
+  color: var(--muted);
 }
 .gauge-label.gauge-label-small {
   font-size: 12px;
@@ -221,44 +253,44 @@ button:hover {
   justify-self: center;
 }
 svg.timeline line {
-  stroke: rgba(148, 163, 184, 0.6);
+  stroke: #cbd5f5;
   stroke-width: 2;
 }
 .timeline {
   width: 100%;
 }
 svg.timeline circle {
-  fill: #22d3ee;
-  stroke: #0b1220;
+  fill: var(--primary);
+  stroke: #ffffff;
   stroke-width: 1.5;
 }
 svg.timeline circle.changed {
-  fill: #22c55e;
+  fill: #16a34a;
 }
 svg.timeline circle.error {
-  fill: #f87171;
+  fill: #f43f5e;
 }
 details summary {
   cursor: pointer;
-  color: #cbd5e1;
+  color: var(--muted);
   font-weight: 600;
 }
 details {
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 10px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
   padding: 8px 10px;
 }
 details pre {
   margin-top: 6px;
 }
 pre {
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
   padding: 12px;
   margin: 0;
-  color: #cbd5e1;
+  color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -271,14 +303,14 @@ pre {
   gap: 8px;
 }
 small {
-  color: #94a3b8;
+  color: var(--muted);
 }
 .hint {
-  color: #94a3b8;
+  color: var(--muted);
   font-size: 12px;
 }
 .summary {
-  color: #e5e7eb;
+  color: var(--text);
   font-weight: 600;
   margin-top: 4px;
   white-space: pre-wrap;
@@ -286,16 +318,16 @@ small {
   overflow-wrap: anywhere;
 }
 .panel {
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 14px;
-  padding: 14px 16px;
-  background: rgba(15, 23, 42, 0.6);
-  box-shadow: 0 16px 30px rgba(2, 6, 23, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
 }
 .panel h3 {
   margin: 0 0 6px 0;
   font-size: 16px;
-  color: #e2e8f0;
+  color: var(--text);
 }
 .panel .hint {
   display: block;
@@ -310,17 +342,17 @@ small {
 .alert-controls label {
   display: block;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--muted);
   margin-bottom: 4px;
 }
 .alert-controls select,
 .alert-controls input {
   width: 97%;
   padding: 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  background: #0b1220;
-  color: #e5e7eb;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   font-weight: 600;
 }
 .alert-controls .grow {
@@ -378,26 +410,26 @@ small {
 }
 .metrics-controls input {
   min-width: 200px;
-  background: #0b1220;
-  color: #e5e7eb;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
   padding: 6px 8px;
   box-sizing: border-box;
 }
 .metrics-panel {
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 12px;
-  padding: 10px;
-  background: linear-gradient(165deg, rgba(15, 23, 42, 0.65), rgba(30, 41, 59, 0.35));
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
 }
 .metrics-panel .metrics-title {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: #e5e7eb;
+  color: var(--text);
 }
 .metrics-list {
   display: flex;
@@ -415,19 +447,19 @@ small {
 }
 .metrics-row input {
   flex: 1 1 auto;
-  background: #0b1220;
-  color: #e5e7eb;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
   padding: 6px 8px;
   box-sizing: border-box;
 }
 .rules-table-wrap {
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
   overflow: auto;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.45));
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
 }
 .rules-table {
   width: 100%;
@@ -436,20 +468,20 @@ small {
 }
 .rules-table th,
 .rules-table td {
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  border-bottom: 1px solid var(--border);
   padding: 8px 10px;
   text-align: left;
   vertical-align: top;
 }
 .rules-table tbody tr:nth-child(odd) {
-  background: rgba(15, 23, 42, 0.2);
+  background: var(--surface-muted);
 }
 .rules-table th {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  color: #94a3b8;
-  background: rgba(15, 23, 42, 0.85);
+  color: var(--muted);
+  background: var(--surface);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -458,10 +490,10 @@ small {
 .rules-table select {
   width: 100%;
   padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  background: #0b1220;
-  color: #e5e7eb;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   font-weight: 600;
   box-sizing: border-box;
 }
@@ -511,27 +543,28 @@ small {
 }
 .rules-form .primary-button {
   align-self: flex-start;
-  background: #22c55e;
-  color: #0b1220;
+  background: var(--primary);
+  color: #ffffff;
   border: none;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 700;
 }
 .rules-form .primary-button:hover {
-  background: #16a34a;
+  background: var(--primary-strong);
 }
 .ghost {
-  background: transparent;
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  color: #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
+  box-shadow: var(--shadow-soft);
 }
 .ghost:hover {
-  border-color: #e5e7eb;
+  border-color: #cbd5f5;
 }
 .alert-list {
   list-style: none;
@@ -541,6 +574,12 @@ small {
   flex-direction: column;
   gap: 4px;
 }
+.alert-list.compact li {
+  font-size: 12px;
+}
+.alert-list.compact .hint {
+  font-size: 11px;
+}
 .alert-list li {
   display: flex;
   align-items: center;
@@ -548,6 +587,16 @@ small {
   margin-bottom:2px;
   flex-wrap: wrap;
   cursor: pointer;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  box-shadow: var(--shadow-soft);
+}
+.alert-list li:hover {
+  transform: translateY(-1px);
+  border-color: #c7d2fe;
 }
 .alert-detail-grid {
   display: grid;
@@ -558,27 +607,27 @@ small {
 .alert-detail-label {
   display: block;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--muted);
   margin-bottom: 4px;
 }
 .alert-detail-pre {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
   padding: 10px 12px;
   white-space: pre-wrap;
   word-break: break-word;
   margin-top: 6px;
 }
-.severity-info { background: #38bdf8; color: #0b1220; }
-.severity-low { background: #a3e635; color: #0b1220; }
-.severity-medium { background: #fbbf24; color: #0b1220; }
-.severity-high { background: #f97316; color: #0b1220; }
-.severity-critical { background: #f43f5e; color: #0b1220; }
+.severity-info { background: #dbeafe; color: #1d4ed8; }
+.severity-low { background: #dcfce7; color: #15803d; }
+.severity-medium { background: #fef3c7; color: #b45309; }
+.severity-high { background: #ffedd5; color: #c2410c; }
+.severity-critical { background: #ffe4e6; color: #be123c; }
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(15, 23, 42, 0.35);
   display: none;
   align-items: center;
   justify-content: center;
@@ -589,13 +638,14 @@ small {
   display: flex;
 }
 .modal-content {
-  background: #0b1220;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
   padding: 20px 22px;
   width: min(900px, 88vw);
   max-height: 86vh;
   overflow: auto;
+  box-shadow: var(--shadow);
 }
 #rulesModal .modal-content {
   width: min(1280px, 96vw);
@@ -611,6 +661,7 @@ small {
       </div>
       <div class="actions">
         <button class="ghost" id="rulesBtn">Rules</button>
+        <button class="ghost" id="themeToggle" type="button">Dark mode</button>
         <div class="control toggle">
           <input type="checkbox" id="eventRefresh" {{if .EventRefresh}}checked{{end}} />
           <label for="eventRefresh">Refresh on capture</label>
@@ -626,54 +677,13 @@ small {
       </div>
     </div>
 
-    <div class="panel" id="alertPanel" style="margin-bottom:14px;">
-      <h3>Alert history</h3>
-      <span class="hint">Latest detections across all capturers (kept in memory).</span>
-      <div class="alert-controls">
-        <div>
-          <label for="alertFilterSeverity">Severity</label>
-          <select id="alertFilterSeverity">
-            <option value="">All</option>
-            <option value="info">Info</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="critical">Critical</option>
-          </select>
-        </div>
-        <div class="grow">
-          <label for="alertFilterText">Search</label>
-          <input id="alertFilterText" type="text" placeholder="Title, message, rule id, source" />
-        </div>
-        <div class="alert-action">
-          <label class="spacer" aria-hidden="true">Action</label>
-          <button class="ghost clear-button" id="alertFilterClear">Clear</button>
-        </div>
-      </div>
-      <div id="alertHistoryBody">
-        {{if .GlobalAlerts}}
-          <ul class="alert-list" id="alertHistoryList">
-            {{range .GlobalAlerts}}
-              <li data-id="{{.ID}}" data-severity="{{.Severity}}" data-rule="{{.RuleID}}" data-source="{{.Source}}" data-title="{{.Title}}" data-message="{{.Message}}" data-at="{{.At}}" data-text="{{.Title}} {{.Message}} {{.RuleID}} {{.Source}}" data-evidence="{{.Evidence}}" data-meta="{{.Meta}}" data-related="{{.Related}}">
-                <span class="pill severity-{{.Severity}}">{{.Severity}}</span>
-                <strong>{{.Title}}</strong> — {{.Message}}
-                <span class="hint">{{.At}}</span>
-              </li>
-            {{end}}
-          </ul>
-        {{else}}
-          <div class="hint">No alerts recorded yet.</div>
-        {{end}}
-      </div>
-    </div>
-
     <div class="grid">
       {{range .Items}}
       <div class="card">
         <div class="stack">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <h2>{{.Name}}</h2>
-            {{if .Error}}<span class="pill" style="background:#f87171;color:#0b1220;">error</span>{{end}}
+            {{if .Error}}<span class="pill" style="background:#fee2e2;color:#b91c1c;">error</span>{{end}}
             {{if .Changed}}<span class="pill changed">changed</span>{{end}}
             {{if .Warming}}<span class="pill warm">warming up</span>{{end}}
           </div>
@@ -733,6 +743,20 @@ small {
               <pre>{{.Verbose}}</pre>
             </details>
             {{end}}
+            {{if .AlertHistory}}
+            <details data-item="{{.Name}}-alerts" class="detail-box">
+              <summary>Alerts (latest {{len .AlertHistory}})</summary>
+              <ul class="alert-list compact">
+                {{range .AlertHistory}}
+                  <li data-id="{{.ID}}" data-severity="{{.Severity}}" data-rule="{{.RuleID}}" data-source="{{.Source}}" data-title="{{.Title}}" data-message="{{.Message}}" data-at="{{.At}}" data-text="{{.Title}} {{.Message}} {{.RuleID}} {{.Source}}" data-evidence="{{.Evidence}}" data-meta="{{.Meta}}" data-related="{{.Related}}">
+                    <span class="pill severity-{{.Severity}}">{{.Severity}}</span>
+                    <strong>{{.Title}}</strong> — {{.Message}}
+                    <span class="hint">{{.At}}</span>
+                  </li>
+                {{end}}
+              </ul>
+            </details>
+            {{end}}
             {{if .Logs}}
             {{ $item := . }}
             <div class="chart">
@@ -768,6 +792,47 @@ small {
         </div>
       </div>
       {{end}}
+    </div>
+
+    <div class="panel" id="alertPanel" style="margin-top:14px;">
+      <h3>Alert history</h3>
+      <span class="hint">Latest detections across all capturers (kept in memory).</span>
+      <div class="alert-controls">
+        <div>
+          <label for="alertFilterSeverity">Severity</label>
+          <select id="alertFilterSeverity">
+            <option value="">All</option>
+            <option value="info">Info</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+        </div>
+        <div class="grow">
+          <label for="alertFilterText">Search</label>
+          <input id="alertFilterText" type="text" placeholder="Title, message, rule id, source" />
+        </div>
+        <div class="alert-action">
+          <label class="spacer" aria-hidden="true">Action</label>
+          <button class="ghost clear-button" id="alertFilterClear">Clear</button>
+        </div>
+      </div>
+      <div id="alertHistoryBody">
+        {{if .GlobalAlerts}}
+          <ul class="alert-list" id="alertHistoryList">
+            {{range .GlobalAlerts}}
+              <li data-id="{{.ID}}" data-severity="{{.Severity}}" data-rule="{{.RuleID}}" data-source="{{.Source}}" data-title="{{.Title}}" data-message="{{.Message}}" data-at="{{.At}}" data-text="{{.Title}} {{.Message}} {{.RuleID}} {{.Source}}" data-evidence="{{.Evidence}}" data-meta="{{.Meta}}" data-related="{{.Related}}">
+                <span class="pill severity-{{.Severity}}">{{.Severity}}</span>
+                <strong>{{.Title}}</strong> — {{.Message}}
+                <span class="hint">{{.At}}</span>
+              </li>
+            {{end}}
+          </ul>
+        {{else}}
+          <div class="hint">No alerts recorded yet.</div>
+        {{end}}
+      </div>
     </div>
   </div>
 
@@ -921,6 +986,7 @@ small {
     const rulesTableBody = document.getElementById('rulesTableBody');
     const rulesAdd = document.getElementById('rulesAdd');
     const ruleMetrics = document.getElementById('rule-metrics');
+    const themeToggle = document.getElementById('themeToggle');
     const metricsBtn = document.getElementById('metricsBtn');
     const metricsModal = document.getElementById('metricsModal');
     const metricsClose = document.getElementById('metricsClose');
@@ -963,6 +1029,29 @@ small {
     let timer = null;
     let es = null;
     let lastRulesData = null;
+
+    function applyTheme(mode) {
+      document.documentElement.setAttribute('data-theme', mode);
+      if (themeToggle) {
+        themeToggle.textContent = mode === 'dark' ? 'Light mode' : 'Dark mode';
+      }
+      try {
+        localStorage.setItem('miniedr.theme', mode);
+      } catch (_) {}
+    }
+
+    function initTheme() {
+      let mode = 'light';
+      try {
+        const saved = localStorage.getItem('miniedr.theme');
+        if (saved) {
+          mode = saved;
+        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          mode = 'dark';
+        }
+      } catch (_) {}
+      applyTheme(mode);
+    }
 
     function wireAlertFilters() {
       const severitySel = document.getElementById('alertFilterSeverity');
@@ -1053,9 +1142,8 @@ small {
     }
 
     function wireAlertDetails() {
-      const list = document.getElementById('alertHistoryList');
-      if (!list) return;
-      const items = list.querySelectorAll('li');
+      const items = document.querySelectorAll('.alert-list li');
+      if (!items) return;
       items.forEach((li) => {
         li.onclick = () => openAlertDetail(li);
       });
@@ -1479,6 +1567,12 @@ small {
     if (rulesClose) rulesClose.onclick = closeRules;
     if (metricsBtn) metricsBtn.onclick = openMetrics;
     if (metricsClose) metricsClose.onclick = closeMetrics;
+    if (themeToggle) {
+      themeToggle.onclick = () => {
+        const cur = document.documentElement.getAttribute('data-theme') || 'light';
+        applyTheme(cur === 'dark' ? 'light' : 'dark');
+      };
+    }
     if (rulesRefresh) {
       rulesRefresh.addEventListener('click', (e) => {
         e.preventDefault();
@@ -1530,6 +1624,7 @@ small {
     if (alertDetailClose) alertDetailClose.onclick = closeAlertDetail;
 
     wireAlertFilters();
+    initTheme();
     applyAuto();
     applyEvent();
   })();
