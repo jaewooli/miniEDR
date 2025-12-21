@@ -48,6 +48,7 @@ type DashboardServer struct {
 	countScales   map[string]map[string]float64 // item -> label -> scale
 	alertHistory  map[string][]dashboardAlertEntry
 	globalAlerts  []dashboardAlertEntry
+	corrVersion   int64
 	rulesConfig   RulesConfig
 	rulesPath     string
 	metricsPath   string
@@ -580,7 +581,12 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 	}
 
 	globalAlerts := append([]dashboardAlertEntry{}, d.globalAlerts...)
-	globalAlerts = correlateAlerts(globalAlerts, d.itemIntervals, d.displayInterval)
+	intervals := make(map[string]time.Duration, len(d.itemIntervals))
+	for k, v := range d.itemIntervals {
+		intervals[k] = v
+	}
+	d.corrVersion++
+	corrVersion := d.corrVersion
 	d.snapshot = dashboardData{
 		Title:             title,
 		RefreshedAt:       ref,
@@ -596,12 +602,34 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 	d.mu.Unlock()
 
 	d.broadcast(ref)
+	d.kickoffCorrelation(globalAlerts, intervals, d.displayInterval, corrVersion, ref)
 }
 
 func (d *DashboardServer) currentSnapshot() dashboardData {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.snapshot
+}
+
+func (d *DashboardServer) kickoffCorrelation(entries []dashboardAlertEntry, intervals map[string]time.Duration, defaultInterval time.Duration, version int64, ref string) {
+	if len(entries) == 0 {
+		return
+	}
+	entriesCopy := append([]dashboardAlertEntry{}, entries...)
+	go func() {
+		correlated := correlateAlerts(entriesCopy, intervals, defaultInterval)
+		d.mu.Lock()
+		if d.corrVersion != version {
+			d.mu.Unlock()
+			return
+		}
+		snap := d.snapshot
+		snap.GlobalAlerts = correlated
+		d.snapshot = snap
+		d.hasSnapshot = true
+		d.mu.Unlock()
+		d.broadcast(ref)
+	}()
 }
 
 func correlateAlerts(entries []dashboardAlertEntry, intervals map[string]time.Duration, defaultInterval time.Duration) []dashboardAlertEntry {
