@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -50,6 +51,7 @@ type DashboardServer struct {
 	rulesConfig   RulesConfig
 	rulesPath     string
 	metricsPath   string
+	defaultMetrics []string
 	detector      *miniedr.Detector
 }
 
@@ -175,6 +177,16 @@ func (d *DashboardServer) SetNowFunc(fn func() time.Time) {
 	d.nowFn = fn
 }
 
+// SetMetricsPath overrides the metrics.json location.
+func (d *DashboardServer) SetMetricsPath(path string) {
+	if path == "" {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.metricsPath = path
+}
+
 // SetAutoRefresh configures default auto-refresh behavior and interval in seconds.
 func (d *DashboardServer) SetAutoRefresh(enabled bool, seconds int) {
 	if seconds <= 0 {
@@ -294,8 +306,16 @@ func (d *DashboardServer) handleRules(w http.ResponseWriter, r *http.Request) {
 func (d *DashboardServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		metrics := d.loadMetricsList()
-		_ = json.NewEncoder(w).Encode(metrics)
+		d.mu.RLock()
+		defaults := append([]string{}, d.defaultMetrics...)
+		d.mu.RUnlock()
+		custom := d.loadCustomMetricsList()
+		payload := metricsPayload{
+			Default: defaults,
+			Custom:  custom,
+			All:     mergeMetrics(defaults, custom),
+		}
+		_ = json.NewEncoder(w).Encode(payload)
 	case http.MethodPost:
 		var req []string
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -307,10 +327,24 @@ func (d *DashboardServer) handleMetrics(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, fmt.Sprintf("save metrics: %v", err), http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(metrics)
+		d.mu.RLock()
+		defaults := append([]string{}, d.defaultMetrics...)
+		d.mu.RUnlock()
+		payload := metricsPayload{
+			Default: defaults,
+			Custom:  metrics,
+			All:     mergeMetrics(defaults, metrics),
+		}
+		_ = json.NewEncoder(w).Encode(payload)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+type metricsPayload struct {
+	Default []string `json:"default"`
+	Custom  []string `json:"custom"`
+	All     []string `json:"all"`
 }
 
 func (d *DashboardServer) captureAndStore() {
@@ -507,6 +541,15 @@ func (d *DashboardServer) captureSingle(c capturer.Capturer, ref, title string, 
 		}
 		return items[i].Name < items[j].Name
 	})
+
+	if len(d.items) >= len(d.Capturers) {
+		derived := deriveDefaultMetrics(items)
+		if len(d.defaultMetrics) == 0 {
+			d.defaultMetrics = derived
+		} else if len(derived) > 0 {
+			d.defaultMetrics = mergeMetrics(d.defaultMetrics, derived)
+		}
+	}
 
 	globalAlerts := append([]dashboardAlertEntry{}, d.globalAlerts...)
 	globalAlerts = correlateAlerts(globalAlerts, d.itemIntervals, d.displayInterval)
@@ -944,7 +987,7 @@ func (d *DashboardServer) saveRulesConfig(cfg RulesConfig) error {
 	return os.WriteFile(d.rulesPath, append(data, '\n'), 0o644)
 }
 
-func (d *DashboardServer) loadMetricsList() []string {
+func (d *DashboardServer) loadCustomMetricsList() []string {
 	if d.metricsPath == "" {
 		return []string{}
 	}
@@ -984,8 +1027,123 @@ func normalizeMetricsList(list []string) []string {
 		seen[m] = struct{}{}
 		metrics = append(metrics, m)
 	}
-	sort.Strings(metrics)
+	sort.Slice(metrics, func(i, j int) bool {
+		return metricLess(metrics[i], metrics[j])
+	})
 	return metrics
+}
+
+func mergeMetrics(a, b []string) []string {
+	merged := make([]string, 0, len(a)+len(b))
+	seen := make(map[string]struct{})
+	for _, m := range a {
+		if m == "" {
+			continue
+		}
+		if _, ok := seen[m]; ok {
+			continue
+		}
+		seen[m] = struct{}{}
+		merged = append(merged, m)
+	}
+	for _, m := range b {
+		if m == "" {
+			continue
+		}
+		if _, ok := seen[m]; ok {
+			continue
+		}
+		seen[m] = struct{}{}
+		merged = append(merged, m)
+	}
+	sort.Slice(merged, func(i, j int) bool {
+		return metricLess(merged[i], merged[j])
+	})
+	return merged
+}
+
+func deriveDefaultMetrics(items []dashboardItem) []string {
+	keys := make([]string, 0, 128)
+	seen := make(map[string]struct{})
+	add := func(k string) {
+		if k == "" {
+			return
+		}
+		if _, ok := seen[k]; ok {
+			return
+		}
+		seen[k] = struct{}{}
+		keys = append(keys, k)
+	}
+	for _, item := range items {
+		for k := range item.Info.Metrics {
+			add(k)
+		}
+	}
+	var hasCPU bool
+	var hasNET bool
+	for _, item := range items {
+		switch strings.ToUpper(item.Name) {
+		case "CPU":
+			hasCPU = true
+		case "NET":
+			hasNET = true
+		}
+	}
+	if hasCPU {
+		add("cpu.total_pct")
+		for i := 0; i < runtime.NumCPU(); i++ {
+			add(fmt.Sprintf("cpu.core%d_pct", i))
+		}
+	}
+	if hasNET {
+		add("net.rx_bytes_per_sec")
+		add("net.tx_bytes_per_sec")
+		add("net.total_bytes_per_sec")
+	}
+	if hasAny(seen, "net.rx_bytes_per_sec", "net.tx_bytes_per_sec") {
+		add("net.total_bytes_per_sec")
+	}
+	if hasAny(seen, "persist.added", "persist.changed", "persist.removed") {
+		add("persist.total_changes")
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return metricLess(keys[i], keys[j])
+	})
+	return keys
+}
+
+func metricLess(a, b string) bool {
+	ap, ai, aok := parseCoreMetric(a)
+	bp, bi, bok := parseCoreMetric(b)
+	if aok && bok && ap == bp {
+		return ai < bi
+	}
+	return a < b
+}
+
+func parseCoreMetric(s string) (string, int, bool) {
+	if !strings.HasPrefix(s, "cpu.core") || !strings.HasSuffix(s, "_pct") {
+		return "", 0, false
+	}
+	mid := strings.TrimSuffix(strings.TrimPrefix(s, "cpu.core"), "_pct")
+	if mid == "" {
+		return "", 0, false
+	}
+	n, err := strconv.Atoi(mid)
+	if err != nil {
+		return "", 0, false
+	}
+	return "cpu.core", n, true
+}
+
+func hasAny(seen map[string]struct{}, keys ...string) bool {
+	for _, k := range keys {
+		if _, ok := seen[k]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func buildMetricRule(def RuleDefinition) miniedr.RuleSpec {

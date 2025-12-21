@@ -206,13 +206,16 @@ func TestMetricsHandlerRoundTrip(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET /metrics status = %d", w.Code)
 	}
-	var got []string
+	var got metricsPayload
 	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 		t.Fatalf("decode GET /metrics: %v", err)
 	}
-	want := []string{"cpu.total_pct", "net.rx_bytes_per_sec"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("GET /metrics = %+v, want %+v", got, want)
+	wantCustom := []string{"cpu.total_pct", "net.rx_bytes_per_sec"}
+	if !reflect.DeepEqual(got.Custom, wantCustom) {
+		t.Fatalf("GET /metrics custom = %+v, want %+v", got.Custom, wantCustom)
+	}
+	if len(got.All) != len(got.Custom) {
+		t.Fatalf("GET /metrics all = %+v, want %+v", got.All, got.Custom)
 	}
 
 	update := []string{"mem.ram.used_pct", "cpu.total_pct"}
@@ -223,13 +226,13 @@ func TestMetricsHandlerRoundTrip(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("POST /metrics status = %d", w.Code)
 	}
-	var gotAfter []string
+	var gotAfter metricsPayload
 	if err := json.NewDecoder(w.Body).Decode(&gotAfter); err != nil {
 		t.Fatalf("decode POST /metrics: %v", err)
 	}
 	wantAfter := []string{"cpu.total_pct", "mem.ram.used_pct"}
-	if !reflect.DeepEqual(gotAfter, wantAfter) {
-		t.Fatalf("POST /metrics = %+v, want %+v", gotAfter, wantAfter)
+	if !reflect.DeepEqual(gotAfter.Custom, wantAfter) {
+		t.Fatalf("POST /metrics custom = %+v, want %+v", gotAfter.Custom, wantAfter)
 	}
 
 	disk, err := os.ReadFile(ds.metricsPath)

@@ -78,18 +78,19 @@ func (c *CPUCapturer) GetInfo() (InfoData, error) {
 		}
 	}
 
-	// 코어별은 너무 길어질 수 있어 top 몇 개만
+	// 코어별은 너무 길어질 수 있어 summary는 top 몇 개만 표기
 	coreInfo := ""
 	if c.prev != nil && len(c.prev.PerCore) == len(c.curr.PerCore) && len(c.curr.PerCore) > 0 {
-		n := min(4, len(c.curr.PerCore))
 		var b strings.Builder
-		for i := 0; i < n; i++ {
+		for i := 0; i < len(c.curr.PerCore); i++ {
 			u := cpuUsagePct(c.prev.PerCore[i], c.curr.PerCore[i])
 			if math.IsNaN(u) {
 				continue
 			}
 			metrics[fmt.Sprintf("cpu.core%d_pct", i)] = u
-			fmt.Fprintf(&b, "cpu%d=%.1f%% ", i, u)
+			if i < 4 {
+				fmt.Fprintf(&b, "cpu%d=%.1f%% ", i, u)
+			}
 		}
 		coreInfo = strings.TrimSpace(b.String())
 		if coreInfo != "" {

@@ -764,8 +764,11 @@ small {
         </div>
         <div class="rules-layout">
           <div class="metrics-panel">
-            <div class="metrics-title">Metrics</div>
-            <div class="hint" id="metricsCount"></div>
+            <div class="metrics-title">Default Metrics</div>
+            <div class="hint" id="metricsDefaultCount"></div>
+            <div id="metricsDefaultList" class="metrics-list"></div>
+            <div class="metrics-title" style="margin-top:12px;">Custom Metrics</div>
+            <div class="hint" id="metricsCustomCount"></div>
             <div id="metricsList" class="metrics-list"></div>
             <div class="hint" id="metricsStatus"></div>
           </div>
@@ -871,8 +874,10 @@ small {
     const metricsInput = document.getElementById('metricsInput');
     const metricsAdd = document.getElementById('metricsAdd');
     const metricsList = document.getElementById('metricsList');
+    const metricsDefaultList = document.getElementById('metricsDefaultList');
     const metricsStatus = document.getElementById('metricsStatus');
-    const metricsCount = document.getElementById('metricsCount');
+    const metricsDefaultCount = document.getElementById('metricsDefaultCount');
+    const metricsCustomCount = document.getElementById('metricsCustomCount');
     const alertDetailModal = document.getElementById('alertDetailModal');
     const alertDetailClose = document.getElementById('alertDetailClose');
     const alertDetailAt = document.getElementById('alertDetailAt');
@@ -1124,7 +1129,26 @@ small {
       return out;
     }
 
-    function renderMetricsList(list) {
+    function renderDefaultMetrics(list) {
+      if (!metricsDefaultList) return;
+      metricsDefaultList.innerHTML = '';
+      (list || []).forEach((metric) => {
+        const row = document.createElement('div');
+        row.className = 'metrics-row';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = metric;
+        input.disabled = true;
+        row.appendChild(input);
+        metricsDefaultList.appendChild(row);
+      });
+      if (metricsDefaultCount) {
+        const count = (list || []).length;
+        metricsDefaultCount.textContent = count + " metric" + (count === 1 ? "" : "s") + " available";
+      }
+    }
+
+    function renderCustomMetrics(list) {
       if (!metricsList) return;
       metricsList.innerHTML = '';
       (list || []).forEach((metric) => {
@@ -1146,9 +1170,9 @@ small {
         row.appendChild(remove);
         metricsList.appendChild(row);
       });
-      if (metricsCount) {
+      if (metricsCustomCount) {
         const count = (list || []).length;
-        metricsCount.textContent = count + " metric" + (count === 1 ? "" : "s") + " available";
+        metricsCustomCount.textContent = count + " metric" + (count === 1 ? "" : "s") + " available";
       }
     }
 
@@ -1162,10 +1186,11 @@ small {
         });
         const text = await res.text();
         if (!res.ok) throw new Error(text || 'failed to save metrics');
-        let data = [];
+        let data = {};
         try { data = JSON.parse(text); } catch (_) {}
-        updateMetricsDatalist(data);
-        renderMetricsList(data);
+        updateMetricsDatalist((data.all || []));
+        renderDefaultMetrics(data.default || []);
+        renderCustomMetrics(data.custom || []);
         if (metricsStatus) {
           const ts = new Date().toLocaleTimeString();
           metricsStatus.textContent = "Metrics saved at " + ts;
@@ -1183,11 +1208,13 @@ small {
         const res = await fetch('/metrics', {cache: 'no-store'});
         if (!res.ok) throw new Error('load failed');
         const data = await res.json();
-        updateMetricsDatalist(data);
-        renderMetricsList(data);
+        updateMetricsDatalist((data.all || []));
+        renderDefaultMetrics(data.default || []);
+        renderCustomMetrics(data.custom || []);
       } catch (err) {
         updateMetricsDatalist([]);
-        renderMetricsList([]);
+        renderDefaultMetrics([]);
+        renderCustomMetrics([]);
       }
     }
 
