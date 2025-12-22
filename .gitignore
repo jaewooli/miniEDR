@@ -1,2 +1,5 @@
 bin/
 .gocache
+explain.md
+.github/
+*sample.json
