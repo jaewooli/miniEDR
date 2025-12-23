@@ -63,9 +63,13 @@ type FileChangeCapturer struct {
 }
 
 func NewFileChangeCapturer(paths ...string) *FileChangeCapturer {
+	watchPaths := paths
+	if len(watchPaths) == 0 {
+		watchPaths = defaultWatchPaths()
+	}
 	return &FileChangeCapturer{
 		Now:      time.Now,
-		Paths:    defaultWatchPaths(),
+		Paths:    watchPaths,
 		MaxFiles: 50_000,
 		WalkFn:   filepath.WalkDir,
 	}

@@ -20,12 +20,25 @@ func (p *AlertPipeline) Process(info capturer.InfoData) ([]Alert, []error) {
 		return alerts, nil
 	}
 
+	var deliver []Alert
+	for _, a := range alerts {
+		if !a.RateLimited {
+			deliver = append(deliver, a)
+		}
+	}
+
 	if p.Router != nil {
-		errs := p.Router.Run(alerts)
+		if len(deliver) == 0 {
+			return alerts, nil
+		}
+		errs := p.Router.Run(deliver)
 		return alerts, errs
 	}
 	if p.Responder != nil {
-		errs := p.Responder.Run(alerts)
+		if len(deliver) == 0 {
+			return alerts, nil
+		}
+		errs := p.Responder.Run(deliver)
 		return alerts, errs
 	}
 	// no responders configured; return alerts for callers to inspect

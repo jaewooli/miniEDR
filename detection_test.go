@@ -65,7 +65,10 @@ func TestLimiter(t *testing.T) {
 		{RuleID: "r", DedupKey: "k"},
 	}
 	out := lim.Filter(alerts)
-	if len(out) != 1 {
-		t.Fatalf("expected 1 allowed, got %d", len(out))
+	if len(out) != 2 {
+		t.Fatalf("expected 2 alerts, got %d", len(out))
+	}
+	if !out[1].RateLimited {
+		t.Fatalf("expected second alert to be rate limited")
 	}
 }

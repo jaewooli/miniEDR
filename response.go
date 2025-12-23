@@ -17,6 +17,7 @@ type PolicyEngine struct {
 	last     map[string]time.Time
 	allowSet map[string]struct{}
 	denySet  map[string]struct{}
+	initOnce sync.Once
 }
 
 // ShouldRespond returns true if the alert passes policy checks.
@@ -52,21 +53,20 @@ func (p *PolicyEngine) ShouldRespond(a Alert) bool {
 }
 
 func (p *PolicyEngine) initSets() bool {
-	if p.allowSet != nil || p.denySet != nil {
-		return true
-	}
-	if len(p.AllowRules) > 0 {
-		p.allowSet = make(map[string]struct{}, len(p.AllowRules))
-		for _, r := range p.AllowRules {
-			p.allowSet[r] = struct{}{}
+	p.initOnce.Do(func() {
+		if len(p.AllowRules) > 0 {
+			p.allowSet = make(map[string]struct{}, len(p.AllowRules))
+			for _, r := range p.AllowRules {
+				p.allowSet[r] = struct{}{}
+			}
 		}
-	}
-	if len(p.DenyRules) > 0 {
-		p.denySet = make(map[string]struct{}, len(p.DenyRules))
-		for _, r := range p.DenyRules {
-			p.denySet[r] = struct{}{}
+		if len(p.DenyRules) > 0 {
+			p.denySet = make(map[string]struct{}, len(p.DenyRules))
+			for _, r := range p.DenyRules {
+				p.denySet[r] = struct{}{}
+			}
 		}
-	}
+	})
 	return true
 }
 

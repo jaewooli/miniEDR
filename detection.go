@@ -184,7 +184,7 @@ func (d *AlertDeduper) Filter(alerts []Alert) []Alert {
 	return out
 }
 
-// RateLimiter drops alerts when exceeded per key.
+// RateLimiter flags alerts when exceeded per key.
 type RateLimiter struct {
 	Window time.Duration
 	Burst  int
@@ -194,7 +194,7 @@ type RateLimiter struct {
 	reset map[string]time.Time
 }
 
-// Filter returns alerts that are within rate limits; rate-limited alerts are dropped but flagged.
+// Filter returns alerts with rate-limited ones flagged for downstream handling.
 func (r *RateLimiter) Filter(alerts []Alert) []Alert {
 	if r == nil || r.Window <= 0 || r.Burst <= 0 {
 		return alerts
@@ -219,6 +219,7 @@ func (r *RateLimiter) Filter(alerts []Alert) []Alert {
 		}
 		if r.count[key] >= r.Burst {
 			a.RateLimited = true
+			out = append(out, a)
 			continue
 		}
 		r.count[key]++

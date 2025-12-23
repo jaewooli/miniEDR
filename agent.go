@@ -62,11 +62,22 @@ func (a *EDRAgent) Run(ctx context.Context) error {
 		close(errCh)
 	}()
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-errCh:
-		return err
+	var ctxErr error
+	for {
+		select {
+		case err, ok := <-errCh:
+			if ok && err != nil {
+				return err
+			}
+			if !ok {
+				if ctxErr != nil {
+					return ctxErr
+				}
+				return nil
+			}
+		case <-ctx.Done():
+			ctxErr = ctx.Err()
+		}
 	}
 }
 

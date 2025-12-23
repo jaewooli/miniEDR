@@ -50,7 +50,7 @@
       "severity": "low",
       "metric": "net.total_bytes_per_sec",
       "op": "\u003e=",
-      "value": 1048576,
+      "value": 3600000,
       "message": "Network throughput {value}B/s exceeds {threshold}B/s",
       "source": "NET",
       "enabled": true

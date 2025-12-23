@@ -201,7 +201,11 @@ func (a *CollectAgent) captureOnce(c capturer.Capturer, interval time.Duration) 
 func newSessionID() string {
 	now := time.Now().UnixNano()
 	u, _ := user.Current()
-	return fmt.Sprintf("%s-%d", u.Username, now)
+	name := "unknown"
+	if u != nil && u.Username != "" {
+		name = u.Username
+	}
+	return fmt.Sprintf("%s-%d", name, now)
 }
 
 // AddSink registers a telemetry sink to receive captured InfoData.

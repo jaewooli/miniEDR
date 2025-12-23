@@ -2,7 +2,6 @@ package miniedr
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/jaewooli/miniedr/capturer"
 )
@@ -141,12 +140,12 @@ func RulePersistenceChange(minChanges int) RuleSpec {
 		Title:    "Persistence modified",
 		Severity: SeverityHigh,
 		Eval: func(info capturer.InfoData) []Alert {
-			if !strings.Contains(strings.ToUpper(info.Summary), "PERSIST") {
+			added, hasAdded := metric(info, "persist.added")
+			changed, hasChanged := metric(info, "persist.changed")
+			removed, hasRemoved := metric(info, "persist.removed")
+			if !hasAdded && !hasChanged && !hasRemoved {
 				return nil
 			}
-			added, _ := metric(info, "persist.added")
-			changed, _ := metric(info, "persist.changed")
-			removed, _ := metric(info, "persist.removed")
 			total := int(added + changed + removed)
 			if total < minChanges {
 				return nil
