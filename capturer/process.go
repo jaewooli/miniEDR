@@ -176,7 +176,21 @@ func (c *ProcCapturer) GetInfo() (InfoData, error) {
 		"proc.new":   float64(len(c.curr.NewPIDs)),
 		"proc.dead":  float64(len(c.curr.DeadPIDs)),
 	}
-	return InfoData{Summary: summary, Metrics: metrics}, nil
+	var fields map[string]interface{}
+	if len(c.curr.NewPIDs) > 0 {
+		limit := min(200, len(c.curr.NewPIDs))
+		procs := make([]ProcMeta, 0, limit)
+		for i := 0; i < limit; i++ {
+			pid := c.curr.NewPIDs[i]
+			if meta, ok := c.curr.Procs[pid]; ok {
+				procs = append(procs, meta)
+			}
+		}
+		fields = map[string]interface{}{
+			"proc.new": procs,
+		}
+	}
+	return InfoData{Summary: summary, Metrics: metrics, Fields: fields}, nil
 }
 
 // GetVerboseInfo returns detailed lists of new/dead processes.

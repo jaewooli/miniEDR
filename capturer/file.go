@@ -209,7 +209,18 @@ func (w *FileChangeCapturer) GetInfo() (InfoData, error) {
 	}
 	meta := w.curr.Meta
 	meta.MaxFiles = w.MaxFiles
-	return InfoData{Summary: summary, Metrics: metrics, Meta: meta}, nil
+	var fields map[string]interface{}
+	if len(w.curr.Events) > 0 {
+		limit := min(200, len(w.curr.Events))
+		events := make([]FileEvent, 0, limit)
+		for i := 0; i < limit; i++ {
+			events = append(events, w.curr.Events[i])
+		}
+		fields = map[string]interface{}{
+			"file.events": events,
+		}
+	}
+	return InfoData{Summary: summary, Metrics: metrics, Meta: meta, Fields: fields}, nil
 }
 
 // GetVerboseInfo lists watch roots and recent file events.

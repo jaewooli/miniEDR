@@ -27,7 +27,14 @@ func main() {
 	dashboardAutoSec := flag.Int("dashboard-refresh-sec", 10, "dashboard auto-refresh interval seconds (default 10)")
 	dashboardEventRefresh := flag.Bool("dashboard-event-refresh", true, "refresh dashboard when captures complete (enables per-capturer intervals)")
 	dashboardCaptureSec := flag.Int("dashboard-capture-sec", 0, "dashboard capture interval seconds (0 uses per-capturer defaults)")
+	dashboardToken := flag.String("dashboard-token", "", "optional token required to access the dashboard")
 	telemetryPath := flag.String("telemetry-file", "", "path to write telemetry JSON lines (rotates at ~5MB)")
+	iocPath := flag.String("ioc", "", "path to IOC config JSON (process/file/IP indicators)")
+	alertsStdout := flag.Bool("alerts-stdout", false, "write alerts as JSON lines to stdout")
+	alertFile := flag.String("alert-file", "", "path to write alert JSON lines (rotates at ~5MB)")
+	alertFileMaxBytes := flag.Int64("alert-file-max-bytes", 0, "max bytes before alert file rotation (0 uses default)")
+	responseKill := flag.Bool("response-kill", false, "kill processes referenced by alert evidence (pid)")
+	responseKillDry := flag.Bool("response-kill-dry-run", true, "simulate kill without terminating processes")
 	configPath := flag.String("config", "", "path to config file (default: auto-detect config.json)")
 	flag.Parse()
 
@@ -48,9 +55,23 @@ func main() {
 	defer stop()
 
 	if *dashboardEnabled {
+		var iocCfg miniedr.IOCConfig
+		if *iocPath != "" {
+			cfg, err := miniedr.LoadIOCConfig(*iocPath)
+			if err != nil {
+				log.Fatalf("load ioc config: %v", err)
+			}
+			iocCfg = cfg
+		}
 		ds := dash.NewDashboardServer(capturers, *dashboardTitle, *verbose)
 		ds.SetAutoRefresh(*dashboardAuto, *dashboardAutoSec)
 		ds.SetEventRefresh(*dashboardEventRefresh)
+		if *dashboardToken != "" {
+			ds.SetAuthToken(*dashboardToken)
+		}
+		if !iocCfg.IsEmpty() {
+			ds.SetIOCConfig(iocCfg)
+		}
 		if *dashboardCaptureSec >= 0 {
 			ds.SetCaptureInterval(time.Duration(*dashboardCaptureSec) * time.Second)
 		}
@@ -67,6 +88,17 @@ func main() {
 	edrAgent.Verbose = *verbose
 	if *telemetryPath != "" {
 		edrAgent.AddSink(miniedr.NewJSONFileSink(*telemetryPath, 0))
+	}
+	var iocCfg miniedr.IOCConfig
+	if *iocPath != "" {
+		cfg, err := miniedr.LoadIOCConfig(*iocPath)
+		if err != nil {
+			log.Fatalf("load ioc config: %v", err)
+		}
+		iocCfg = cfg
+	}
+	if *alertsStdout || *alertFile != "" || *responseKill || !iocCfg.IsEmpty() {
+		edrAgent.Pipeline = buildAlertPipeline(iocCfg, *alertsStdout, *alertFile, *alertFileMaxBytes, *responseKill, *responseKillDry)
 	}
 
 	if err := edrAgent.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
@@ -118,4 +150,34 @@ func resolveConfigPath(userPath string) string {
 		}
 	}
 	return ""
+}
+
+func buildAlertPipeline(iocCfg miniedr.IOCConfig, alertsStdout bool, alertFile string, alertFileMaxBytes int64, responseKill bool, responseKillDry bool) *miniedr.AlertPipeline {
+	rules := miniedr.DefaultRules()
+	if !iocCfg.IsEmpty() {
+		rules = append(rules, miniedr.RuleIOCMatch(iocCfg))
+	}
+	if len(rules) == 0 {
+		return nil
+	}
+	detector := &miniedr.Detector{
+		Rules:   rules,
+		Deduper: &miniedr.AlertDeduper{Window: 30 * time.Second},
+		Limiter: &miniedr.RateLimiter{Window: 30 * time.Second, Burst: 20},
+	}
+	var responders []miniedr.AlertResponder
+	if alertsStdout {
+		responders = append(responders, &miniedr.LogResponder{Out: os.Stdout})
+	}
+	if alertFile != "" {
+		responders = append(responders, miniedr.NewAlertFileResponder(alertFile, alertFileMaxBytes))
+	}
+	if responseKill {
+		responders = append(responders, &miniedr.ProcessKillerResponder{DryRun: responseKillDry})
+	}
+	pipeline := &miniedr.AlertPipeline{Detector: detector}
+	if len(responders) > 0 {
+		pipeline.Responder = &miniedr.ResponderPipeline{Responders: responders}
+	}
+	return pipeline
 }

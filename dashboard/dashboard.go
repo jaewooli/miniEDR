@@ -31,6 +31,7 @@ type DashboardServer struct {
 	nowFn           func() time.Time
 	title           string
 	verbose         bool
+	authToken       string
 	autoRefresh     bool
 	eventRefresh    bool
 	refreshSeconds  int
@@ -55,6 +56,7 @@ type DashboardServer struct {
 	defaultMetrics []string
 	customMetrics []CustomMetric
 	detector      *miniedr.Detector
+	iocConfig     miniedr.IOCConfig
 }
 
 type dashboardItem struct {
@@ -191,6 +193,21 @@ func (d *DashboardServer) SetAutoRefresh(enabled bool, seconds int) {
 	d.refreshSeconds = seconds
 }
 
+// SetAuthToken configures a shared token required for dashboard access.
+func (d *DashboardServer) SetAuthToken(token string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.authToken = strings.TrimSpace(token)
+}
+
+// SetIOCConfig enables IOC matching alerts in the dashboard detector.
+func (d *DashboardServer) SetIOCConfig(cfg miniedr.IOCConfig) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.iocConfig = cfg
+	d.rebuildDetectorLocked()
+}
+
 // SetEventRefresh toggles refresh-on-capture behavior exposed to the UI.
 func (d *DashboardServer) SetEventRefresh(enabled bool) {
 	d.mu.Lock()
@@ -250,6 +267,53 @@ func (d *DashboardServer) Run(ctx context.Context, addr string) error {
 	return err
 }
 
+const authCookieName = "miniedr_token"
+
+func (d *DashboardServer) authorize(w http.ResponseWriter, r *http.Request) bool {
+	d.mu.RLock()
+	token := d.authToken
+	d.mu.RUnlock()
+	if token == "" {
+		return true
+	}
+	reqToken, fromQuery := extractAuthToken(r)
+	if reqToken == "" || reqToken != token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return false
+	}
+	if fromQuery {
+		http.SetCookie(w, &http.Cookie{
+			Name:     authCookieName,
+			Value:    reqToken,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+	return true
+}
+
+func extractAuthToken(r *http.Request) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	if token := strings.TrimSpace(r.Header.Get("X-EDR-Token")); token != "" {
+		return token, false
+	}
+	if auth := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		return strings.TrimSpace(auth[7:]), false
+	}
+	if cookie, err := r.Cookie(authCookieName); err == nil {
+		if token := strings.TrimSpace(cookie.Value); token != "" {
+			return token, false
+		}
+	}
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		return token, true
+	}
+	return "", false
+}
+
 func (d *DashboardServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	d.ensureInitialSnapshot()
 	snap := d.currentSnapshot()
@@ -260,11 +324,17 @@ func (d *DashboardServer) handleDashboard(w http.ResponseWriter, r *http.Request
 
 // ServeHTTP implements http.Handler.
 func (d *DashboardServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if !d.authorize(w, r) {
+		return
+	}
 	d.handleDashboard(w, r)
 }
 
 // handleRules exposes GET/POST to view or update rule configuration.
 func (d *DashboardServer) handleRules(w http.ResponseWriter, r *http.Request) {
+	if !d.authorize(w, r) {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		d.mu.RLock()
@@ -297,6 +367,9 @@ func (d *DashboardServer) handleRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *DashboardServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if !d.authorize(w, r) {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		d.mu.RLock()
@@ -835,6 +908,9 @@ func (d *DashboardServer) broadcast(msg string) {
 }
 
 func (d *DashboardServer) serveEvents(w http.ResponseWriter, r *http.Request) {
+	if !d.authorize(w, r) {
+		return
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -1029,6 +1105,9 @@ func (d *DashboardServer) rebuildDetectorLocked() {
 			continue
 		}
 		specs = append(specs, buildMetricRule(rule))
+	}
+	if !d.iocConfig.IsEmpty() {
+		specs = append(specs, miniedr.RuleIOCMatch(d.iocConfig))
 	}
 	d.detector = &miniedr.Detector{
 		Rules: specs,

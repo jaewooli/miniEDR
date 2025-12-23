@@ -153,7 +153,18 @@ func (c *ConnCapturer) GetInfo() (InfoData, error) {
 		len(c.curr.New),
 		len(c.curr.Dead),
 	)
-	return InfoData{Summary: summary, Metrics: metrics}, nil
+	var fields map[string]interface{}
+	if len(c.curr.New) > 0 {
+		limit := min(200, len(c.curr.New))
+		conns := make([]ConnID, 0, limit)
+		for i := 0; i < limit; i++ {
+			conns = append(conns, c.curr.New[i])
+		}
+		fields = map[string]interface{}{
+			"conn.new": conns,
+		}
+	}
+	return InfoData{Summary: summary, Metrics: metrics, Fields: fields}, nil
 }
 
 // GetVerboseInfo returns connection states and samples of new/dead entries.

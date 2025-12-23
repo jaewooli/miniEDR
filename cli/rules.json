@@ -6,7 +6,7 @@
       "severity": "medium",
       "metric": "cpu.total_pct",
       "op": "\u003e=",
-      "value": 1,
+      "value": 10,
       "message": "CPU usage {value}% exceeds threshold {threshold}%",
       "source": "CPU",
       "enabled": true
