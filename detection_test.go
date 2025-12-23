@@ -72,3 +72,31 @@ func TestLimiter(t *testing.T) {
 		t.Fatalf("expected second alert to be rate limited")
 	}
 }
+
+func TestRuleMemPressureDedupKeys(t *testing.T) {
+	info := capturer.InfoData{
+		Metrics: map[string]float64{
+			"mem.ram.used_pct":  95,
+			"mem.swap.used_pct": 80,
+		},
+		Meta: capturer.TelemetryMeta{Capturer: "MEM"},
+	}
+	det := &Detector{
+		Rules:   []RuleSpec{RuleMemPressure(90, 60)},
+		Deduper: &AlertDeduper{Window: time.Hour},
+	}
+	alerts := det.Evaluate(info)
+	if len(alerts) != 2 {
+		t.Fatalf("expected 2 alerts, got %d", len(alerts))
+	}
+	keys := map[string]struct{}{}
+	for _, a := range alerts {
+		keys[a.DedupKey] = struct{}{}
+	}
+	if _, ok := keys["mem.pressure|ram"]; !ok {
+		t.Fatalf("missing ram dedup key: %v", keys)
+	}
+	if _, ok := keys["mem.pressure|swap"]; !ok {
+		t.Fatalf("missing swap dedup key: %v", keys)
+	}
+}

@@ -35,6 +35,7 @@ type CollectAgent struct {
 	Pipeline  *miniedr.AlertPipeline
 
 	mu         sync.Mutex
+	processMu  sync.Mutex
 	Errs       []error
 	sinkStats  map[string]*sinkStat
 	pipelineCh chan queueItem
@@ -304,6 +305,9 @@ func firstNonEmpty(a, b string) string {
 }
 
 func (a *CollectAgent) processInfo(name string, info capturer.InfoData) {
+	a.processMu.Lock()
+	defer a.processMu.Unlock()
+
 	for _, sink := range a.Sinks {
 		if sink == nil {
 			continue

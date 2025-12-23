@@ -348,6 +348,10 @@ func (d *DashboardServer) handleRules(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cfg := normalizeRulesConfig(req)
+		if err := d.saveRulesConfig(cfg); err != nil {
+			http.Error(w, fmt.Sprintf("save rules: %v", err), http.StatusInternalServerError)
+			return
+		}
 		d.mu.Lock()
 		d.rulesConfig = cfg
 		d.rebuildDetectorLocked()
@@ -356,10 +360,6 @@ func (d *DashboardServer) handleRules(w http.ResponseWriter, r *http.Request) {
 		}
 		out := d.rulesConfig
 		d.mu.Unlock()
-		if err := d.saveRulesConfig(cfg); err != nil {
-			http.Error(w, fmt.Sprintf("save rules: %v", err), http.StatusInternalServerError)
-			return
-		}
 		_ = json.NewEncoder(w).Encode(out)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

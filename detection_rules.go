@@ -50,17 +50,19 @@ func RuleMemPressure(ramThreshold, swapThreshold float64) RuleSpec {
 			var alerts []Alert
 			if hasRAM && ram >= ramThreshold {
 				alerts = append(alerts, Alert{
-					RuleID:   "mem.high_usage",
+					RuleID:   "mem.pressure",
 					Message:  fmt.Sprintf("RAM usage %.2f%% exceeds %.0f%%", ram, ramThreshold),
 					Evidence: map[string]any{"mem.ram.used_pct": ram},
+					DedupKey: "mem.pressure|ram",
 				})
 			}
 			if hasSwap && swap >= swapThreshold {
 				alerts = append(alerts, Alert{
-					RuleID:   "mem.swap_pressure",
+					RuleID:   "mem.pressure",
 					Severity: SeverityLow,
 					Message:  fmt.Sprintf("Swap usage %.2f%% exceeds %.0f%%", swap, swapThreshold),
 					Evidence: map[string]any{"mem.swap.used_pct": swap},
+					DedupKey: "mem.pressure|swap",
 				})
 			}
 			return alerts
